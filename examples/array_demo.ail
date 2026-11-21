@@ -1,0 +1,19 @@
+;; Array manipulation and accumulation in SynapLang
+;; Allocates array in WebAssembly linear memory, sums elements, and returns total
+
+(fn sum_array (arr: arr_i32) -> i32
+  (let total: i32 0)
+  (let i: i32 0)
+  (let len: i32 (arr_len arr))
+  (while (< i len)
+    (set total (+ total (arr_get arr i)))
+    (set i (+ i 1)))
+  total)
+
+(fn main () -> i32
+  ;; Create a static array of 5 elements
+  (let numbers: arr_i32 (array 10 20 30 40 50))
+  ;; Modify the 3rd element (index 2) to 100
+  (arr_set numbers 2 100)
+  ;; Calculate sum: 10 + 20 + 100 + 40 + 50 = 220
+  (call sum_array numbers))

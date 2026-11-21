@@ -1,11 +1,13 @@
 from typing import List, Dict, Set as PySet
 from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
-    BinaryOp, UnaryOp, If, While, Block, Call, Return, Type
+    BinaryOp, UnaryOp, If, While, Block, Call, Return,
+    ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    Type
 )
 
 def wasm_type(t: str) -> str:
-    if t == Type.I32 or t == Type.BOOL:
+    if t in (Type.I32, Type.BOOL, Type.ARR_I32):
         return "i32"
     if t == Type.F64:
         return "f64"
@@ -21,7 +23,24 @@ class WasmCodegen:
 
     def generate(self, module: Module) -> str:
         self.label_counter = 0
-        lines = ["(module"]
+        lines = [
+            "(module",
+            "  (memory (export \"memory\") 2)",
+            "  (global $heap_ptr (mut i32) (i32.const 1024))",
+            "",
+            "  ;; Linear memory array allocator",
+            "  (func $_alloc_arr (param $size i32) (result i32)",
+            "    (local $base i32)",
+            "    (local $needed i32)",
+            "    (local.set $base (global.get $heap_ptr))",
+            "    (i32.store (local.get $base) (local.get $size))",
+            "    (local.set $needed (i32.add (i32.const 4) (i32.mul (local.get $size) (i32.const 4))))",
+            "    (local.set $needed (i32.and (i32.add (local.get $needed) (i32.const 7)) (i32.const -8)))",
+            "    (global.set $heap_ptr (i32.add (global.get $heap_ptr) (local.get $needed)))",
+            "    (i32.add (local.get $base) (i32.const 4))",
+            "  )",
+            ""
+        ]
         
         for fn in module.functions:
             lines.append(self._generate_function(fn))
@@ -31,9 +50,26 @@ class WasmCodegen:
 
     def _collect_locals(self, exprs: List[Expr], param_names: PySet[str]) -> Dict[str, str]:
         locals_dict: Dict[str, str] = {}
+        has_arr_lit = False
 
         def walk(e: Expr):
-            if isinstance(e, Let):
+            nonlocal has_arr_lit
+            if isinstance(e, ArrLit):
+                has_arr_lit = True
+                for el in e.elements:
+                    walk(el)
+            elif isinstance(e, ArrNew):
+                walk(e.size)
+            elif isinstance(e, ArrGet):
+                walk(e.arr)
+                walk(e.index)
+            elif isinstance(e, ArrSet):
+                walk(e.arr)
+                walk(e.index)
+                walk(e.value)
+            elif isinstance(e, ArrLen):
+                walk(e.arr)
+            elif isinstance(e, Let):
                 if e.name not in param_names:
                     locals_dict[e.name] = wasm_type(e.type_name)
                 if e.value:
@@ -67,6 +103,10 @@ class WasmCodegen:
 
         for e in exprs:
             walk(e)
+
+        if has_arr_lit:
+            locals_dict["__arr_tmp"] = "i32"
+
         return locals_dict
 
     def _generate_function(self, fn: Function) -> str:
@@ -95,7 +135,7 @@ class WasmCodegen:
             
             # If not the last expression and it yields a value on the stack, drop it
             expr_type = getattr(expr, "inferred_type", None)
-            if not is_last and expr_type and expr_type != Type.VOID and not isinstance(expr, (Let, Set, While)):
+            if not is_last and expr_type and expr_type != Type.VOID and not isinstance(expr, (Let, Set, While, ArrSet)):
                 code = f"    (drop\n  {code}\n    )"
             fn_parts.append(f"{code}\n")
 
@@ -105,7 +145,7 @@ class WasmCodegen:
     def _generate_expr(self, expr: Expr, indent: int = 4) -> str:
         sp = " " * indent
         if isinstance(expr, Literal):
-            if expr.type_name == Type.I32:
+            if expr.type_name in (Type.I32, Type.ARR_I32):
                 return f"{sp}(i32.const {int(expr.value)})"
             elif expr.type_name == Type.F64:
                 val = float(expr.value)
@@ -218,5 +258,70 @@ class WasmCodegen:
         if isinstance(expr, Return):
             val_code = self._generate_expr(expr.expr, indent + 2)
             return f"{sp}(return\n{val_code}\n{sp})"
+
+        if isinstance(expr, ArrNew):
+            size_code = self._generate_expr(expr.size, indent + 2)
+            return f"{sp}(call $_alloc_arr\n{size_code}\n{sp})"
+
+        if isinstance(expr, ArrLen):
+            arr_code = self._generate_expr(expr.arr, indent + 4)
+            return (
+                f"{sp}(i32.load\n"
+                f"{sp}  (i32.sub\n"
+                f"{arr_code}\n"
+                f"{sp}    (i32.const 4)\n"
+                f"{sp}  )\n"
+                f"{sp})"
+            )
+
+        if isinstance(expr, ArrGet):
+            arr_code = self._generate_expr(expr.arr, indent + 4)
+            idx_code = self._generate_expr(expr.index, indent + 6)
+            return (
+                f"{sp}(i32.load\n"
+                f"{sp}  (i32.add\n"
+                f"{arr_code}\n"
+                f"{sp}    (i32.mul\n"
+                f"{idx_code}\n"
+                f"{sp}      (i32.const 4)\n"
+                f"{sp}    )\n"
+                f"{sp}  )\n"
+                f"{sp})"
+            )
+
+        if isinstance(expr, ArrSet):
+            arr_code = self._generate_expr(expr.arr, indent + 4)
+            idx_code = self._generate_expr(expr.index, indent + 6)
+            val_code = self._generate_expr(expr.value, indent + 2)
+            return (
+                f"{sp}(i32.store\n"
+                f"{sp}  (i32.add\n"
+                f"{arr_code}\n"
+                f"{sp}    (i32.mul\n"
+                f"{idx_code}\n"
+                f"{sp}      (i32.const 4)\n"
+                f"{sp}    )\n"
+                f"{sp}  )\n"
+                f"{val_code}\n"
+                f"{sp})"
+            )
+
+        if isinstance(expr, ArrLit):
+            n = len(expr.elements)
+            lines = [
+                f"{sp}(block (result i32)",
+                f"{sp}  (local.set $__arr_tmp (call $_alloc_arr (i32.const {n})))"
+            ]
+            for i, el in enumerate(expr.elements):
+                el_code = self._generate_expr(el, indent + 4)
+                offset = i * 4
+                lines.append(
+                    f"{sp}  (i32.store (i32.add (local.get $__arr_tmp) (i32.const {offset}))\n"
+                    f"{el_code}\n"
+                    f"{sp}  )"
+                )
+            lines.append(f"{sp}  (local.get $__arr_tmp)")
+            lines.append(f"{sp})")
+            return "\n".join(lines)
 
         return f"{sp};; unknown expr"

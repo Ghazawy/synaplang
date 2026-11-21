@@ -9,9 +9,9 @@ param_list ::= "(" ws (param ws)* ")" | "[" ws (param ws)* "]"
 param ::= ident ws ":" ws type_name | ident ws type_name
 
 return_type ::= "->" ws type_name | type_name
-type_name ::= "i32" | "f64" | "bool"
+type_name ::= "i32" | "f64" | "bool" | "arr_i32"
 
-expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | block_expr | call_expr | return_expr
+expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | block_expr | call_expr | return_expr | arr_new_expr | arr_get_expr | arr_set_expr | arr_len_expr | arr_lit_expr
 
 literal ::= float_lit | int_lit | bool_lit
 int_lit ::= "-"? [0-9]+
@@ -31,6 +31,12 @@ while_expr ::= "(" ws "while" ws expr ws expr+ ws ")"
 block_expr ::= "(" ws ("block" | "do") ws expr+ ws ")"
 call_expr ::= "(" ws "call" ws ident (ws expr)* ws ")"
 return_expr ::= "(" ws "return" ws expr ws ")"
+
+arr_new_expr ::= "(" ws "arr_new" ws expr ws ")"
+arr_get_expr ::= "(" ws "arr_get" ws expr ws expr ws ")"
+arr_set_expr ::= "(" ws "arr_set" ws expr ws expr ws expr ws ")"
+arr_len_expr ::= "(" ws "arr_len" ws expr ws ")"
+arr_lit_expr ::= "(" ws "array" (ws expr)* ws ")"
 
 ident ::= [a-zA-Z_] [a-zA-Z0-9_]*
 ws ::= [ \t\n\r]*

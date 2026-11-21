@@ -2,7 +2,9 @@ import json
 from typing import Dict, Optional, List, Tuple
 from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
-    BinaryOp, UnaryOp, If, While, Block, Call, Return, Type, ASTNode
+    BinaryOp, UnaryOp, If, While, Block, Call, Return,
+    ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    Type, ASTNode
 )
 
 class TypeErrorException(Exception):
@@ -140,8 +142,8 @@ class TypeChecker:
                     suggested_fix=f"Ensure value expression evaluates to '{expr.type_name}'"
                 )
             self._declare_var(expr.name, expr.type_name, expr)
-            expr.inferred_type = expr.type_name
-            return expr.type_name
+            expr.inferred_type = Type.VOID
+            return Type.VOID
 
         if isinstance(expr, Set):
             target_type = self._lookup_var(expr.name, expr)
@@ -155,8 +157,8 @@ class TypeChecker:
                     found=val_type,
                     suggested_fix=f"Change value expression to evaluate to '{target_type}'"
                 )
-            expr.inferred_type = target_type
-            return target_type
+            expr.inferred_type = Type.VOID
+            return Type.VOID
 
         if isinstance(expr, BinaryOp):
             left_t = self._check_expr(expr.left, expected_return)
@@ -336,5 +338,106 @@ class TypeChecker:
                 )
             expr.inferred_type = ret_t
             return ret_t
+
+        if isinstance(expr, ArrNew):
+            size_t = self._check_expr(expr.size, expected_return)
+            if size_t != Type.I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_new size must be i32, got '{size_t}'",
+                    expr,
+                    expected=Type.I32,
+                    found=size_t,
+                    suggested_fix="Pass an integer (i32) size to arr_new"
+                )
+            expr.inferred_type = Type.ARR_I32
+            return Type.ARR_I32
+
+        if isinstance(expr, ArrGet):
+            arr_t = self._check_expr(expr.arr, expected_return)
+            if arr_t != Type.ARR_I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_get expects arr_i32 as first argument, got '{arr_t}'",
+                    expr,
+                    expected=Type.ARR_I32,
+                    found=arr_t,
+                    suggested_fix="Pass an array (arr_i32) to arr_get"
+                )
+            idx_t = self._check_expr(expr.index, expected_return)
+            if idx_t != Type.I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_get index must be i32, got '{idx_t}'",
+                    expr,
+                    expected=Type.I32,
+                    found=idx_t,
+                    suggested_fix="Use an integer index (i32) for arr_get"
+                )
+            expr.inferred_type = Type.I32
+            return Type.I32
+
+        if isinstance(expr, ArrSet):
+            arr_t = self._check_expr(expr.arr, expected_return)
+            if arr_t != Type.ARR_I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_set expects arr_i32 as first argument, got '{arr_t}'",
+                    expr,
+                    expected=Type.ARR_I32,
+                    found=arr_t,
+                    suggested_fix="Pass an array (arr_i32) to arr_set"
+                )
+            idx_t = self._check_expr(expr.index, expected_return)
+            if idx_t != Type.I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_set index must be i32, got '{idx_t}'",
+                    expr,
+                    expected=Type.I32,
+                    found=idx_t,
+                    suggested_fix="Use an integer index (i32) for arr_set"
+                )
+            val_t = self._check_expr(expr.value, expected_return)
+            if val_t != Type.I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_set value must be i32 for arr_i32, got '{val_t}'",
+                    expr,
+                    expected=Type.I32,
+                    found=val_t,
+                    suggested_fix="Ensure value assigned into arr_i32 is an i32"
+                )
+            expr.inferred_type = Type.VOID
+            return Type.VOID
+
+        if isinstance(expr, ArrLen):
+            arr_t = self._check_expr(expr.arr, expected_return)
+            if arr_t != Type.ARR_I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"arr_len expects arr_i32, got '{arr_t}'",
+                    expr,
+                    expected=Type.ARR_I32,
+                    found=arr_t,
+                    suggested_fix="Pass an array (arr_i32) to arr_len"
+                )
+            expr.inferred_type = Type.I32
+            return Type.I32
+
+        if isinstance(expr, ArrLit):
+            for i, el in enumerate(expr.elements):
+                el_t = self._check_expr(el, expected_return)
+                if el_t != Type.I32:
+                    raise TypeErrorException(
+                        "TypeMismatch",
+                        f"Array literal element {i+1} must be i32, got '{el_t}'",
+                        el,
+                        expected=Type.I32,
+                        found=el_t,
+                        suggested_fix="Ensure all elements in (array ...) are i32"
+                    )
+            expr.inferred_type = Type.ARR_I32
+            return Type.ARR_I32
 
         raise TypeErrorException("UnknownExpression", f"Unknown AST expression node '{type(expr).__name__}'", expr)

@@ -1,4 +1,4 @@
-// AI-Native Language (AIL) Grammar Specification for Lark
+// SynapLang Grammar Specification for Lark
 
 start: module | top_level_list
 
@@ -20,9 +20,10 @@ param: CNAME ":" type_name
 return_type: "->" type_name
            | type_name
 
-type_name: "i32" -> type_i32
-         | "f64" -> type_f64
-         | "bool" -> type_bool
+type_name: "i32"     -> type_i32
+         | "f64"     -> type_f64
+         | "bool"    -> type_bool
+         | "arr_i32" -> type_arr_i32
 
 ?expr: literal
      | var_ref
@@ -35,6 +36,11 @@ type_name: "i32" -> type_i32
      | block_expr
      | call_expr
      | return_expr
+     | arr_new_expr
+     | arr_get_expr
+     | arr_set_expr
+     | arr_len_expr
+     | arr_lit_expr
 
 literal: SIGNED_FLOAT -> float_lit
        | SIGNED_INT   -> int_lit
@@ -69,6 +75,12 @@ block_expr: "(" "do" expr+ ")"
 call_expr: "(" "call" CNAME expr* ")"
 
 return_expr: "(" "return" expr ")"
+
+arr_new_expr: "(" "arr_new" expr ")"
+arr_get_expr: "(" "arr_get" expr expr ")"
+arr_set_expr: "(" "arr_set" expr expr expr ")"
+arr_len_expr: "(" "arr_len" expr ")"
+arr_lit_expr: "(" "array" expr* ")"
 
 COMMENT: /;[^\n]*/
 %ignore COMMENT

@@ -2,7 +2,9 @@ import os
 from lark import Lark, Transformer, v_args, Token, Tree
 from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
-    BinaryOp, UnaryOp, If, While, Block, Call, Return, Type, SourceLocation
+    BinaryOp, UnaryOp, If, While, Block, Call, Return,
+    ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    Type, SourceLocation
 )
 
 def _get_loc(meta) -> SourceLocation:
@@ -23,6 +25,9 @@ class ASTBuilder(Transformer):
 
     def type_bool(self, meta, children):
         return Type.BOOL
+
+    def type_arr_i32(self, meta, children):
+        return Type.ARR_I32
 
     def param(self, meta, children):
         name = str(children[0])
@@ -97,13 +102,28 @@ class ASTBuilder(Transformer):
     def return_expr(self, meta, children):
         return Return(loc=_get_loc(meta), expr=children[0])
 
+    def arr_new_expr(self, meta, children):
+        return ArrNew(loc=_get_loc(meta), size=children[0])
+
+    def arr_get_expr(self, meta, children):
+        return ArrGet(loc=_get_loc(meta), arr=children[0], index=children[1])
+
+    def arr_set_expr(self, meta, children):
+        return ArrSet(loc=_get_loc(meta), arr=children[0], index=children[1], value=children[2])
+
+    def arr_len_expr(self, meta, children):
+        return ArrLen(loc=_get_loc(meta), arr=children[0])
+
+    def arr_lit_expr(self, meta, children):
+        return ArrLit(loc=_get_loc(meta), elements=children)
+
     def fn_def(self, meta, children):
         name = str(children[0])
         idx = 1
         params = children[idx]
         idx += 1
         ret_type = Type.VOID
-        if idx < len(children) and isinstance(children[idx], str) and children[idx] in (Type.I32, Type.F64, Type.BOOL, Type.VOID):
+        if idx < len(children) and isinstance(children[idx], str) and children[idx] in (Type.I32, Type.F64, Type.BOOL, Type.VOID, Type.ARR_I32):
             ret_type = children[idx]
             idx += 1
         body = children[idx:]

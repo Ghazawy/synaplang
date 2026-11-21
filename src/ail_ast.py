@@ -6,6 +6,7 @@ class Type:
     F64 = "f64"
     BOOL = "bool"
     VOID = "void"
+    ARR_I32 = "arr_i32"
     UNKNOWN = "unknown"
 
     @classmethod
@@ -19,6 +20,8 @@ class Type:
             return cls.BOOL
         if s in ("void", "nil", "none"):
             return cls.VOID
+        if s in ("arr_i32", "array", "i32[]", "int[]", "arr"):
+            return cls.ARR_I32
         raise ValueError(f"Unknown type: {s}")
 
 @dataclass
@@ -88,6 +91,29 @@ class Call(Expr):
 @dataclass
 class Return(Expr):
     expr: Optional[Expr] = None
+
+@dataclass
+class ArrNew(Expr):
+    size: Optional[Expr] = None
+
+@dataclass
+class ArrGet(Expr):
+    arr: Optional[Expr] = None
+    index: Optional[Expr] = None
+
+@dataclass
+class ArrSet(Expr):
+    arr: Optional[Expr] = None
+    index: Optional[Expr] = None
+    value: Optional[Expr] = None
+
+@dataclass
+class ArrLen(Expr):
+    arr: Optional[Expr] = None
+
+@dataclass
+class ArrLit(Expr):
+    elements: List[Expr] = field(default_factory=list)
 
 @dataclass
 class Param(ASTNode):
