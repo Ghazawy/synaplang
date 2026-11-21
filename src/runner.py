@@ -82,3 +82,19 @@ class Runner:
             raise ValueError(f"Function '{fn_name}' not found in compiled WebAssembly exports")
         func = exports[fn_name]
         return func(store, *args)
+
+    def prepare_callable(self, source_code: str, fn_name: str):
+        wat = self.compile_to_wat(source_code)
+        store = Store(self.engine)
+        linker = Linker(self.engine)
+        linker.define_func("env", "print_str", FuncType([ValType.i32(), ValType.i32()], []), lambda c, p, l: None, access_caller=True)
+        linker.define_func("env", "println_str", FuncType([ValType.i32(), ValType.i32()], []), lambda c, p, l: None, access_caller=True)
+        linker.define_func("env", "print_i32", FuncType([ValType.i32()], []), lambda v: None)
+        linker.define_func("env", "print_f64", FuncType([ValType.f64()], []), lambda v: None)
+        wasm_module = WasmModule(self.engine, wat)
+        instance = linker.instantiate(store, wasm_module)
+        exports = instance.exports(store)
+        if fn_name not in exports:
+            raise ValueError(f"Function '{fn_name}' not found in compiled WebAssembly exports")
+        func = exports[fn_name]
+        return lambda *args: func(store, *args)

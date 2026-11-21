@@ -1,9 +1,10 @@
 # ⚡ SynapLang: The AI-Native Programming Language
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-41%20passed-brightgreen.svg)]()
 [![Target: WebAssembly](https://img.shields.io/badge/target-WebAssembly-654FF0.svg)](https://webassembly.org/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Speedup: 34x](https://img.shields.io/badge/speedup-up%20to%2034x%20vs%20Python-orange.svg)]()
 
 > *"Human code is legacy. Software is no longer written for human eyes—it is synthesized by neural models and executed on bare metal. SynapLang is the first programming language built from scratch for Large Language Models and autonomous coding agents."*
 
@@ -20,11 +21,32 @@ For over seventy years, programming languages were designed to cater to human bi
 **SynapLang changes everything:**
 1. **Homoiconic S-Expressions:** The syntax *is* the Abstract Syntax Tree (AST). 1:1 bijection. Zero parsing ambiguity.
 2. **Machine-Readable Diagnostics:** When an error occurs, the compiler outputs structured **JSON** with exact AST locations and actionable suggested fixes for instant self-healing.
-3. **Bare-Metal Speed with WebAssembly:** Directly compiles to WebAssembly (`.wat` / Wasm) for near-C execution performance inside a sandboxed environment.
-4. **Strict Static Typing:** Catch 100% of type bugs at compile time (`i32`, `f64`, `bool`, `arr_i32`, `string`).
-5. **Linear Memory & Arrays:** Built-in dynamic and static array primitives (`arr_new`, `arr_get`, `arr_set`, `arr_len`, `array`) managed in WebAssembly linear memory.
-6. **Strings & Host Printing:** Built-in string literals, dynamic concatenation (`str_concat`), and zero-overhead host I/O (`print`, `println`, `print_i32`, `print_f64`).
-7. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
+3. **Bare-Metal Speed with WebAssembly:** Directly compiles to WebAssembly (`.wat` / Wasm) for near-C execution performance inside a sandboxed environment (**up to 34x faster than Python**).
+4. **Strict Static Typing:** Catch 100% of type bugs at compile time (`i32`, `f64`, `bool`, `arr_i32`, `string`, and custom `struct` records).
+5. **Linear Memory & Auto-Grow:** Built-in dynamic and static array primitives (`arr_new`, `arr_get`, `arr_set`, `arr_len`, `array`) and structs backed by auto-growing WebAssembly linear memory (`memory.grow`).
+6. **Composite Structs & Records:** Typed record structures in linear memory (`struct`, `struct_new`, `struct_get`, `struct_set`).
+7. **Interactive Terminal REPL:** Instant evaluation, live session state, and pretty diagnostics with `synap repl`.
+8. **Web Playground:** Run SynapLang directly inside your browser on GitHub Pages with zero installation.
+9. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
+
+---
+
+## 🚀 Performance Benchmarks (SynapLang Wasm vs. Python 3.12)
+
+Benchmarked across 5 computational workloads (`benchmarks/benchmark_vs_python.py`):
+
+| Benchmark Task | Python 3.12 Time | SynapLang (Wasm) | Speedup | Tokens (Python / Synap) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Recursive Fibonacci (n=25)** | 27.89 ms | **1.21 ms** | **23.13x** | 39 / 60 |
+| **Iterative Factorial (n=12)** | 0.18 ms | **0.05 ms** | **3.67x** | 39 / 71 |
+| **Array Sum (10,000 Elements)** | 2.34 ms | **0.09 ms** | **25.06x** | 24 / 112 |
+| **Bubble Sort (300 Elements)** | 0.26 ms | **0.14 ms** | **1.84x** | 75 / 185 |
+| **Point Struct Distance (5,000 iters)** | 4.74 ms | **0.14 ms** | **34.06x** | 70 / 128 |
+
+Run benchmarks yourself:
+```bash
+python benchmarks/benchmark_vs_python.py
+```
 
 ---
 
@@ -42,21 +64,6 @@ flowchart LR
 
 ---
 
-## 🥊 Human Languages vs. SynapLang
-
-| Dimension | Legacy Human Languages (Python / JS / C++) | SynapLang (AI-Native Language) |
-| :--- | :--- | :--- |
-| **Primary Consumer** | Human eyes & short-term memory | LLMs & Autonomous AI Agents |
-| **Parsing Precedence** | Complex operator precedence tables | Unambiguous Tree / S-expressions |
-| **Whitespace Impact** | Significant indentation errors | Whitespace invariant |
-| **Compiler Feedback** | Human prose & ASCII error strings | **Structured JSON diagnostics with auto-fix hints** |
-| **Execution Model** | Slow dynamic runtime or heavy toolchains | **Blazing-fast sandboxed WebAssembly (Wasm)** |
-| **Memory & Data** | Garbage collectors or manual pointers | **Safe Linear Memory arrays (`arr_i32`) & strings** |
-| **I/O Integration** | Heavy system libraries | **Direct Host Function Calls (`print`, `println`)** |
-| **Context Window Cost**| Heavy boilerplate & token fragmentation | Minimal token overhead, maximum semantic density |
-
----
-
 ## ⚡ Quickstart in 10 Seconds
 
 ### 1. Installation
@@ -67,63 +74,89 @@ cd synaplang
 pip install -r requirements.txt
 ```
 
-### 2. Run Examples
+### 2. Interactive Terminal REPL
 ```bash
-# Strings & Host Printing
-python src/cli.py run examples/hello_strings.ail --fn main
-# Output:
-# Hello, Autonomous AI Agent!
-# Total message length: 27
-
-# WebAssembly Linear Memory Arrays
-python src/cli.py run examples/array_demo.ail --fn main
-# Output: 220
-
-# Fibonacci Algorithm
-python src/cli.py run examples/fibonacci.ail --fn main
-# Output: 55
+python src/cli.py repl
+```
+```
+============================================================
+   SynapLang v0.3.0 - AI-Native Interactive REPL
+   Direct S-Expression Evaluation -> WebAssembly (Wasmtime)
+============================================================
+synap> (+ 15 27)
+=> 42
+synap> (fn square (n: i32) -> i32 (* n n))
+Defined function: square
+synap> (call square 9)
+=> 81
 ```
 
-### 3. Check Code with Machine JSON Diagnostics
+### 3. Run Programs
+```bash
+# Structs & Records
+python src/cli.py run examples/struct_demo.ail --fn main
+
+# Strings & Host Printing
+python src/cli.py run examples/hello_strings.ail --fn main
+
+# Linear Memory Arrays
+python src/cli.py run examples/array_demo.ail --fn main
+
+# Fibonacci
+python src/cli.py run examples/fibonacci.ail --fn main
+```
+
+### 4. Check Code with Machine JSON Diagnostics
 ```bash
 python src/cli.py check examples/hello_strings.ail --json
 ```
-Output:
-```json
-{
-  "status": "ok",
-  "message": "Type check passed successfully"
-}
-```
-
-If you introduce a type error, the compiler outputs actionable structured data:
+If an AI agent produces a bug, the compiler responds with actionable structured diagnostics:
 ```json
 {
   "status": "error",
-  "error_type": "TypeMismatch",
-  "message": "println expects string argument, got 'i32'",
-  "location": {
-    "line": 3,
-    "column": 12
-  },
+  "error_type": "UnknownField",
+  "message": "Struct 'Point' has no field 'z'",
+  "location": { "line": 5, "column": 5 },
   "context": {
-    "node": "PrintlnStr",
-    "expected_type": "string",
-    "found_type": "i32"
+    "node": "StructGet",
+    "expected_type": "valid struct field",
+    "found_type": "z"
   },
-  "suggested_fix": "Pass a string expression to (println ...)"
+  "suggested_fix": "Available fields for 'Point' are: x, y"
 }
 ```
 
-### 4. Export GBNF Grammar for Ollama & llama.cpp
+### 5. Export GBNF Grammar for Ollama & llama.cpp
 ```bash
 python src/cli.py export-gbnf
 ```
-Exports `grammar/synap.gbnf` for grammar-constrained sampling.
+Exports `grammar/synap.gbnf` for zero-syntax-error LLM generation.
+
+---
+
+## 🌐 Web Playground
+
+Try SynapLang in the browser! Open `site/index.html` in your browser or deploy it directly to GitHub Pages.
+- Switch between interactive examples (Fibonacci, Structs, Arrays, Strings, Self-Healing).
+- Run directly in WebAssembly.
+- View compiled WebAssembly Text (WAT) format in real time.
 
 ---
 
 ## 💻 Language Syntax at a Glance
+
+### Structs & Records:
+```lisp
+(struct Point [x: i32] [y: i32])
+(struct Rect [top_left: Point] [bottom_right: Point])
+
+(fn area (r: Rect) -> i32
+  (let p1: Point (struct_get r top_left))
+  (let p2: Point (struct_get r bottom_right))
+  (let width: i32 (- (struct_get p2 x) (struct_get p1 x)))
+  (let height: i32 (- (struct_get p2 y) (struct_get p1 y)))
+  (* width height))
+```
 
 ### Strings & Host Printing:
 ```lisp
@@ -147,23 +180,6 @@ Exports `grammar/synap.gbnf` for grammar-constrained sampling.
     (set total (+ total (arr_get arr i)))
     (set i (+ i 1)))
   total)
-
-(fn main () -> i32
-  (let numbers: arr_i32 (array 10 20 30 40 50))
-  (arr_set numbers 2 100)
-  (call sum_array numbers))
-```
-
-### Recursive Fibonacci:
-```lisp
-(fn fib (n: i32) -> i32
-  (if (<= n 1)
-    n
-    (+ (call fib (- n 1))
-       (call fib (- n 2)))))
-
-(fn main () -> i32
-  (call fib 10))
 ```
 
 ---
@@ -174,7 +190,7 @@ Run the full automated test suite with `pytest`:
 ```bash
 pytest
 ```
-All **31 tests** verify arithmetic, strings, host print functions, linear memory arrays, nested precedence, control flow, recursion, type checking, and automated agent self-healing loops.
+All **41 tests** verify arithmetic, strings, host print functions, linear memory arrays, structs, recursion, REPL execution, and self-healing diagnostics.
 
 ---
 

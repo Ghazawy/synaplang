@@ -4,6 +4,7 @@ from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
     BinaryOp, UnaryOp, If, While, Block, Call, Return,
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    StructDef, StructField, StructNew, StructGet, StructSet,
     PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
     Type, SourceLocation
 )
@@ -32,6 +33,9 @@ class ASTBuilder(Transformer):
 
     def type_string(self, meta, children):
         return Type.STRING
+
+    def type_custom(self, meta, children):
+        return str(children[0])
 
     def param(self, meta, children):
         name = str(children[0])
@@ -131,6 +135,34 @@ class ASTBuilder(Transformer):
     def arr_lit_expr(self, meta, children):
         return ArrLit(loc=_get_loc(meta), elements=children)
 
+    def struct_new_expr(self, meta, children):
+        struct_name = str(children[0])
+        args = children[1:]
+        return StructNew(loc=_get_loc(meta), struct_name=struct_name, args=args)
+
+    def struct_get_expr(self, meta, children):
+        target = children[0]
+        field_name = str(children[1])
+        return StructGet(loc=_get_loc(meta), target=target, field_name=field_name)
+
+    def struct_set_expr(self, meta, children):
+        target = children[0]
+        field_name = str(children[1])
+        value = children[2]
+        return StructSet(loc=_get_loc(meta), target=target, field_name=field_name, value=value)
+
+    def struct_def(self, meta, children):
+        name = str(children[0])
+        fields = []
+        for c in children[1:]:
+            if isinstance(c, list):
+                for p in c:
+                    if isinstance(p, Param):
+                        fields.append(StructField(loc=p.loc, name=p.name, type_name=p.type_name))
+            elif isinstance(c, Param):
+                fields.append(StructField(loc=c.loc, name=c.name, type_name=c.type_name))
+        return StructDef(loc=_get_loc(meta), name=name, fields=fields)
+
     def print_str_expr(self, meta, children):
         return PrintStr(loc=_get_loc(meta), expr=children[0])
 
@@ -155,7 +187,7 @@ class ASTBuilder(Transformer):
         params = children[idx]
         idx += 1
         ret_type = Type.VOID
-        if idx < len(children) and isinstance(children[idx], str) and children[idx] in (Type.I32, Type.F64, Type.BOOL, Type.VOID, Type.ARR_I32, Type.STRING):
+        if idx < len(children) and isinstance(children[idx], str) and (children[idx] in (Type.I32, Type.F64, Type.BOOL, Type.VOID, Type.ARR_I32, Type.STRING) or children[idx].isidentifier()):
             ret_type = children[idx]
             idx += 1
         body = children[idx:]
@@ -163,11 +195,13 @@ class ASTBuilder(Transformer):
 
     def module(self, meta, children):
         funcs = [c for c in children if isinstance(c, Function)]
-        return Module(loc=_get_loc(meta), functions=funcs)
+        structs = [c for c in children if isinstance(c, StructDef)]
+        return Module(loc=_get_loc(meta), functions=funcs, structs=structs)
 
     def top_level_list(self, meta, children):
         funcs = [c for c in children if isinstance(c, Function)]
-        return Module(loc=_get_loc(meta), functions=funcs)
+        structs = [c for c in children if isinstance(c, StructDef)]
+        return Module(loc=_get_loc(meta), functions=funcs, structs=structs)
 
 class Parser:
     def __init__(self, grammar_path: str = None):

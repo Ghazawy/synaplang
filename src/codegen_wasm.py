@@ -4,6 +4,7 @@ from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
     BinaryOp, UnaryOp, If, While, Block, Call, Return,
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    StructDef, StructField, StructNew, StructGet, StructSet,
     PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
     Type
 )
@@ -86,6 +87,14 @@ class WasmCodegen:
             elif isinstance(e, StrConcat):
                 walk(e.left)
                 walk(e.right)
+            elif isinstance(e, StructNew):
+                for a in e.args:
+                    walk(a)
+            elif isinstance(e, StructGet):
+                walk(e.target)
+            elif isinstance(e, StructSet):
+                walk(e.target)
+                walk(e.value)
 
         for fn in module.functions:
             for expr in fn.body:
@@ -96,6 +105,11 @@ class WasmCodegen:
     def generate(self, module: Module) -> str:
         self.label_counter = 0
         self.string_literals, initial_heap = self._collect_strings(module)
+        self.struct_fields = {}
+        for s in getattr(module, "structs", []):
+            self.struct_fields[s.name] = {
+                f.name: (i, f.type_name) for i, f in enumerate(s.fields)
+            }
 
         lines = [
             "(module",
@@ -105,7 +119,7 @@ class WasmCodegen:
             "  (import \"env\" \"print_i32\" (func $print_i32 (param i32)))",
             "  (import \"env\" \"print_f64\" (func $print_f64 (param f64)))",
             "",
-            "  (memory (export \"memory\") 2)",
+            "  (memory (export \"memory\") 16)",
             f"  (global $heap_ptr (mut i32) (i32.const {initial_heap}))",
             ""
         ]
@@ -121,7 +135,7 @@ class WasmCodegen:
 
         lines.extend([
             "",
-            "  ;; Linear memory allocator for dynamic arrays & strings",
+            "  ;; Linear memory allocator for dynamic arrays & strings with auto memory.grow",
             "  (func $_alloc_arr (param $size i32) (result i32)",
             "    (local $base i32)",
             "    (local $needed i32)",
@@ -129,8 +143,26 @@ class WasmCodegen:
             "    (i32.store (local.get $base) (local.get $size))",
             "    (local.set $needed (i32.add (i32.const 4) (i32.mul (local.get $size) (i32.const 4))))",
             "    (local.set $needed (i32.and (i32.add (local.get $needed) (i32.const 7)) (i32.const -8)))",
+            "    (block $grow_arr_ok",
+            "      (br_if $grow_arr_ok (i32.lt_u (i32.add (global.get $heap_ptr) (local.get $needed)) (i32.mul (memory.size) (i32.const 65536))))",
+            "      (drop (memory.grow (i32.const 8)))",
+            "    )",
             "    (global.set $heap_ptr (i32.add (global.get $heap_ptr) (local.get $needed)))",
             "    (i32.add (local.get $base) (i32.const 4))",
+            "  )",
+            "",
+            "  ;; Linear memory allocator for structs (fields * 8 bytes) with auto memory.grow",
+            "  (func $_alloc_struct (param $fields i32) (result i32)",
+            "    (local $base i32)",
+            "    (local $needed i32)",
+            "    (local.set $base (global.get $heap_ptr))",
+            "    (local.set $needed (i32.mul (local.get $fields) (i32.const 8)))",
+            "    (block $grow_st_ok",
+            "      (br_if $grow_st_ok (i32.lt_u (i32.add (global.get $heap_ptr) (local.get $needed)) (i32.mul (memory.size) (i32.const 65536))))",
+            "      (drop (memory.grow (i32.const 8)))",
+            "    )",
+            "    (global.set $heap_ptr (i32.add (global.get $heap_ptr) (local.get $needed)))",
+            "    (local.get $base)",
             "  )",
             "",
             "  ;; Dynamic string concatenation helper",
@@ -189,9 +221,10 @@ class WasmCodegen:
     def _collect_locals(self, exprs: List[Expr], param_names: PySet[str]) -> Dict[str, str]:
         locals_dict: Dict[str, str] = {}
         has_arr_lit = False
+        struct_counter = 0
 
         def walk(e: Expr):
-            nonlocal has_arr_lit
+            nonlocal has_arr_lit, struct_counter
             if isinstance(e, ArrLit):
                 has_arr_lit = True
                 for el in e.elements:
@@ -242,6 +275,17 @@ class WasmCodegen:
             elif isinstance(e, StrConcat):
                 walk(e.left)
                 walk(e.right)
+            elif isinstance(e, StructNew):
+                struct_counter += 1
+                e._temp_name = f"__st_{struct_counter}"
+                locals_dict[e._temp_name] = "i32"
+                for a in e.args:
+                    walk(a)
+            elif isinstance(e, StructGet):
+                walk(e.target)
+            elif isinstance(e, StructSet):
+                walk(e.target)
+                walk(e.value)
 
         for e in exprs:
             walk(e)
@@ -274,7 +318,7 @@ class WasmCodegen:
             code = self._generate_expr(expr, indent=4)
             
             expr_type = getattr(expr, "inferred_type", None)
-            if not is_last and expr_type and expr_type != Type.VOID and not isinstance(expr, (Let, Set, While, ArrSet, PrintStr, PrintlnStr, PrintI32, PrintF64)):
+            if not is_last and expr_type and expr_type != Type.VOID and not isinstance(expr, (Let, Set, While, ArrSet, StructSet, PrintStr, PrintlnStr, PrintI32, PrintF64)):
                 code = f"    (drop\n  {code}\n    )"
             fn_parts.append(f"{code}\n")
 
@@ -386,9 +430,19 @@ class WasmCodegen:
             )
 
         if isinstance(expr, Block):
-            lines = [self._generate_expr(b, indent + 2) for b in expr.exprs]
-            joined = "\n".join(lines)
-            return f"{sp}(block\n{joined}\n{sp})"
+            ret_t = getattr(expr, "inferred_type", Type.VOID)
+            res_str = f" (result {wasm_type(ret_t)})" if ret_t and ret_t != Type.VOID else ""
+            lines = [f"{sp}(block{res_str}"]
+            num_exprs = len(expr.exprs)
+            for i, b in enumerate(expr.exprs):
+                is_last = (i == num_exprs - 1)
+                code = self._generate_expr(b, indent + 2)
+                b_type = getattr(b, "inferred_type", None)
+                if not is_last and b_type and b_type != Type.VOID and not isinstance(b, (Let, Set, While, ArrSet, StructSet, PrintStr, PrintlnStr, PrintI32, PrintF64)):
+                    code = f"{sp}  (drop\n  {code}\n{sp}  )"
+                lines.append(code)
+            lines.append(f"{sp})")
+            return "\n".join(lines)
 
         if isinstance(expr, Call):
             args_code = [self._generate_expr(a, indent + 2) for a in expr.args]
@@ -466,6 +520,61 @@ class WasmCodegen:
             lines.append(f"{sp}  (local.get $__arr_tmp)")
             lines.append(f"{sp})")
             return "\n".join(lines)
+
+        if isinstance(expr, StructNew):
+            tmp_name = getattr(expr, "_temp_name", "__struct_tmp")
+            n = len(expr.args)
+            lines = [
+                f"{sp}(block (result i32)",
+                f"{sp}  (local.set ${tmp_name} (call $_alloc_struct (i32.const {n})))"
+            ]
+            for i, arg in enumerate(expr.args):
+                arg_code = self._generate_expr(arg, indent + 4)
+                offset = i * 8
+                ftype = getattr(arg, "inferred_type", Type.I32)
+                store_op = "f64.store" if ftype == Type.F64 else "i32.store"
+                lines.append(
+                    f"{sp}  ({store_op} (i32.add (local.get ${tmp_name}) (i32.const {offset}))\n"
+                    f"{arg_code}\n"
+                    f"{sp}  )"
+                )
+            lines.append(f"{sp}  (local.get ${tmp_name})")
+            lines.append(f"{sp})")
+            return "\n".join(lines)
+
+        if isinstance(expr, StructGet):
+            target_code = self._generate_expr(expr.target, indent + 4)
+            st_name = getattr(expr.target, "inferred_type", "")
+            fields = self.struct_fields.get(st_name, {})
+            idx, ftype = fields.get(expr.field_name, (0, Type.I32))
+            offset = idx * 8
+            load_op = "f64.load" if ftype == Type.F64 else "i32.load"
+            return (
+                f"{sp}({load_op}\n"
+                f"{sp}  (i32.add\n"
+                f"{target_code}\n"
+                f"{sp}    (i32.const {offset})\n"
+                f"{sp}  )\n"
+                f"{sp})"
+            )
+
+        if isinstance(expr, StructSet):
+            target_code = self._generate_expr(expr.target, indent + 4)
+            val_code = self._generate_expr(expr.value, indent + 2)
+            st_name = getattr(expr.target, "inferred_type", "")
+            fields = self.struct_fields.get(st_name, {})
+            idx, ftype = fields.get(expr.field_name, (0, Type.I32))
+            offset = idx * 8
+            store_op = "f64.store" if ftype == Type.F64 else "i32.store"
+            return (
+                f"{sp}({store_op}\n"
+                f"{sp}  (i32.add\n"
+                f"{target_code}\n"
+                f"{sp}    (i32.const {offset})\n"
+                f"{sp}  )\n"
+                f"{val_code}\n"
+                f"{sp})"
+            )
 
         if isinstance(expr, PrintStr):
             str_code = self._generate_expr(expr.expr, indent + 4)

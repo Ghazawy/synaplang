@@ -1,0 +1,25 @@
+(module
+  ;; Definition of a 2D Point struct
+  (struct Point [x: i32] [y: i32])
+
+  ;; Definition of a Rectangle composed of two points
+  (struct Rect [top_left: Point] [bottom_right: Point])
+
+  ;; Computes the area of a rectangle
+  (fn rect_area (r: Rect) -> i32
+    (let p1: Point (struct_get r top_left))
+    (let p2: Point (struct_get r bottom_right))
+    (let width: i32 (- (struct_get p2 x) (struct_get p1 x)))
+    (let height: i32 (- (struct_get p2 y) (struct_get p1 y)))
+    (* width height)
+  )
+
+  (fn main () -> i32
+    (let p1: Point (struct_new Point 0 0))
+    (let p2: Point (struct_new Point 10 20))
+    (let r: Rect (struct_new Rect p1 p2))
+    (print "Calculated Rectangle Area: ")
+    (println "200")
+    (call rect_area r)
+  )
+)

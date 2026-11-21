@@ -4,6 +4,7 @@ from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
     BinaryOp, UnaryOp, If, While, Block, Call, Return,
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    StructDef, StructField, StructNew, StructGet, StructSet,
     PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
     Type, ASTNode
 )
@@ -42,6 +43,9 @@ class TypeChecker:
     def __init__(self):
         # Global function signatures: name -> (List[Param], return_type)
         self.functions: Dict[str, Tuple[List[str], str]] = {}
+        # Global struct definitions: struct_name -> {field_name: (offset_idx, field_type)}
+        self.structs: Dict[str, Dict[str, Tuple[int, str]]] = {}
+        self.struct_fields: Dict[str, List[Tuple[str, str]]] = {}
         # Scoped symbol tables for local variables
         self.scopes: List[Dict[str, str]] = []
 
@@ -77,7 +81,33 @@ class TypeChecker:
 
     def check(self, module: Module) -> dict:
         self.functions.clear()
+        self.structs.clear()
+        self.struct_fields.clear()
         self.scopes.clear()
+
+        # Pass 0: Collect struct definitions
+        for s in getattr(module, "structs", []):
+            if s.name in self.structs:
+                raise TypeErrorException(
+                    "DuplicateStruct",
+                    f"Struct '{s.name}' is already defined",
+                    s,
+                    suggested_fix=f"Remove or rename duplicate struct '{s.name}'"
+                )
+            field_dict = {}
+            field_list = []
+            for i, f in enumerate(s.fields):
+                if f.name in field_dict:
+                    raise TypeErrorException(
+                        "DuplicateField",
+                        f"Duplicate field '{f.name}' in struct '{s.name}'",
+                        f,
+                        suggested_fix=f"Rename duplicate field '{f.name}' in struct '{s.name}'"
+                    )
+                field_dict[f.name] = (i, f.type_name)
+                field_list.append((f.name, f.type_name))
+            self.structs[s.name] = field_dict
+            self.struct_fields[s.name] = field_list
 
         # Pass 1: Collect function signatures
         for fn in module.functions:
@@ -524,5 +554,95 @@ class TypeChecker:
                 )
             expr.inferred_type = Type.STRING
             return Type.STRING
+
+        if isinstance(expr, StructNew):
+            if expr.struct_name not in self.structs:
+                raise TypeErrorException(
+                    "UndefinedStruct",
+                    f"Struct '{expr.struct_name}' is not defined",
+                    expr,
+                    suggested_fix=f"Define struct before instantiating: (struct {expr.struct_name} ...)"
+                )
+            expected_fields = self.struct_fields[expr.struct_name]
+            if len(expr.args) != len(expected_fields):
+                raise TypeErrorException(
+                    "ArgumentCountMismatch",
+                    f"Struct '{expr.struct_name}' expects {len(expected_fields)} field values, got {len(expr.args)}",
+                    expr,
+                    expected=str(len(expected_fields)),
+                    found=str(len(expr.args)),
+                    suggested_fix=f"Provide values for fields: {', '.join(f[0] for f in expected_fields)}"
+                )
+            for i, (arg, (fname, ftype)) in enumerate(zip(expr.args, expected_fields)):
+                at = self._check_expr(arg, expected_return)
+                if at != ftype:
+                    raise TypeErrorException(
+                        "FieldTypeMismatch",
+                        f"Field '{fname}' of struct '{expr.struct_name}' expects type '{ftype}', got '{at}'",
+                        arg,
+                        expected=ftype,
+                        found=at,
+                        suggested_fix=f"Ensure expression for field '{fname}' evaluates to '{ftype}'"
+                    )
+            expr.inferred_type = expr.struct_name
+            return expr.struct_name
+
+        if isinstance(expr, StructGet):
+            target_t = self._check_expr(expr.target, expected_return)
+            if target_t not in self.structs:
+                raise TypeErrorException(
+                    "InvalidStructAccess",
+                    f"Cannot access field '{expr.field_name}' on non-struct type '{target_t}'",
+                    expr,
+                    expected="struct instance",
+                    found=target_t,
+                    suggested_fix="Field access (struct_get ...) requires a struct instance"
+                )
+            fields = self.structs[target_t]
+            if expr.field_name not in fields:
+                avail = ", ".join(fields.keys())
+                raise TypeErrorException(
+                    "UnknownField",
+                    f"Struct '{target_t}' has no field '{expr.field_name}'",
+                    expr,
+                    suggested_fix=f"Available fields for '{target_t}' are: {avail}"
+                )
+            _, ftype = fields[expr.field_name]
+            expr.inferred_type = ftype
+            return ftype
+
+        if isinstance(expr, StructSet):
+            target_t = self._check_expr(expr.target, expected_return)
+            if target_t not in self.structs:
+                raise TypeErrorException(
+                    "InvalidStructAccess",
+                    f"Cannot set field '{expr.field_name}' on non-struct type '{target_t}'",
+                    expr,
+                    expected="struct instance",
+                    found=target_t,
+                    suggested_fix="Field mutation (struct_set ...) requires a struct instance"
+                )
+            fields = self.structs[target_t]
+            if expr.field_name not in fields:
+                avail = ", ".join(fields.keys())
+                raise TypeErrorException(
+                    "UnknownField",
+                    f"Struct '{target_t}' has no field '{expr.field_name}'",
+                    expr,
+                    suggested_fix=f"Available fields for '{target_t}' are: {avail}"
+                )
+            _, ftype = fields[expr.field_name]
+            val_t = self._check_expr(expr.value, expected_return)
+            if val_t != ftype:
+                raise TypeErrorException(
+                    "FieldTypeMismatch",
+                    f"Cannot assign type '{val_t}' to field '{expr.field_name}' of type '{ftype}' in struct '{target_t}'",
+                    expr,
+                    expected=ftype,
+                    found=val_t,
+                    suggested_fix=f"Ensure assigned value evaluates to '{ftype}'"
+                )
+            expr.inferred_type = Type.VOID
+            return Type.VOID
 
         raise TypeErrorException("UnknownExpression", f"Unknown AST expression node '{type(expr).__name__}'", expr)

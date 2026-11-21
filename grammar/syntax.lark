@@ -5,7 +5,9 @@ start: module | top_level_list
 module: "(" "module" top_level* ")"
 top_level_list: top_level*
 
-?top_level: fn_def
+?top_level: fn_def | struct_def
+
+struct_def: "(" "struct" CNAME (param_list | param)* ")"
 
 fn_def: "(" "fn" CNAME param_list return_type? expr+ ")"
 
@@ -18,13 +20,13 @@ param: CNAME ":" type_name
      | CNAME type_name
 
 return_type: "->" type_name
-           | type_name
 
 type_name: "i32"     -> type_i32
          | "f64"     -> type_f64
          | "bool"    -> type_bool
          | "arr_i32" -> type_arr_i32
          | "string"  -> type_string
+         | CNAME     -> type_custom
 
 ?expr: literal
      | var_ref
@@ -42,6 +44,9 @@ type_name: "i32"     -> type_i32
      | arr_set_expr
      | arr_len_expr
      | arr_lit_expr
+     | struct_new_expr
+     | struct_get_expr
+     | struct_set_expr
      | print_str_expr
      | println_str_expr
      | print_i32_expr
@@ -89,6 +94,12 @@ arr_get_expr: "(" "arr_get" expr expr ")"
 arr_set_expr: "(" "arr_set" expr expr expr ")"
 arr_len_expr: "(" "arr_len" expr ")"
 arr_lit_expr: "(" "array" expr* ")"
+
+struct_new_expr: "(" "struct_new" CNAME expr* ")"
+               | "(" "new" CNAME expr* ")"
+struct_get_expr: "(" "struct_get" expr CNAME ")"
+               | "(" "." expr CNAME ")"
+struct_set_expr: "(" "struct_set" expr CNAME expr ")"
 
 print_str_expr: "(" "print" expr ")"
 println_str_expr: "(" "println" expr ")"

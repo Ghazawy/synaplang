@@ -35,8 +35,16 @@ def main():
     gbnf_parser = subparsers.add_parser("export-gbnf", help="Export GBNF grammar for llama.cpp / Ollama")
     gbnf_parser.add_argument("-o", "--output", default="grammar/synap.gbnf", help="Output file path (default: grammar/synap.gbnf)")
 
+    # Command: repl
+    subparsers.add_parser("repl", help="Start the interactive SynapLang S-Expression REPL")
+
     args = parser.parse_args()
     runner = Runner()
+
+    if args.command == "repl":
+        from src.repl import start_repl
+        start_repl()
+        sys.exit(0)
 
     if args.command == "export-gbnf":
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

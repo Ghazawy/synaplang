@@ -25,6 +25,8 @@ class Type:
             return cls.ARR_I32
         if s in ("string", "str"):
             return cls.STRING
+        if s.isidentifier():
+            return s
         raise ValueError(f"Unknown type: {s}")
 
 @dataclass
@@ -144,6 +146,32 @@ class StrConcat(Expr):
     right: Optional[Expr] = None
 
 @dataclass
+class StructField(ASTNode):
+    name: str = ""
+    type_name: str = Type.I32
+
+@dataclass
+class StructDef(ASTNode):
+    name: str = ""
+    fields: List[StructField] = field(default_factory=list)
+
+@dataclass
+class StructNew(Expr):
+    struct_name: str = ""
+    args: List[Expr] = field(default_factory=list)
+
+@dataclass
+class StructGet(Expr):
+    target: Optional[Expr] = None
+    field_name: str = ""
+
+@dataclass
+class StructSet(Expr):
+    target: Optional[Expr] = None
+    field_name: str = ""
+    value: Optional[Expr] = None
+
+@dataclass
 class Param(ASTNode):
     name: str = ""
     type_name: str = Type.I32
@@ -158,3 +186,4 @@ class Function(ASTNode):
 @dataclass
 class Module(ASTNode):
     functions: List[Function] = field(default_factory=list)
+    structs: List[StructDef] = field(default_factory=list)

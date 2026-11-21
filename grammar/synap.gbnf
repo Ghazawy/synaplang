@@ -1,17 +1,18 @@
 # SynapLang GBNF Grammar for llama.cpp and Ollama Constrained Decoding
 
-root ::= module | fn_def+
+root ::= module | (fn_def | struct_def)+
 
-module ::= "(" ws "module" ws fn_def* ")"
-fn_def ::= "(" ws "fn" ws ident ws param_list ws return_type? ws expr+ ")"
+module ::= "(" ws "module" ws (fn_def | struct_def)* ")"
+struct_def ::= "(" ws "struct" ws ident ws (param_list | (param ws)*) ")"
+fn_def ::= "(" ws "fn" ws ident ws param_list (ws return_type)? ws expr+ ")"
 
 param_list ::= "(" ws (param ws)* ")" | "[" ws (param ws)* "]"
-param ::= ident ws ":" ws type_name | ident ws type_name
+param ::= ident ws ":" ws type_name | ident ws type_name | "[" ws ident ws ":" ws type_name ws "]" | "(" ws ident ws ":" ws type_name ws ")"
 
-return_type ::= "->" ws type_name | type_name
-type_name ::= "i32" | "f64" | "bool" | "arr_i32" | "string"
+return_type ::= "->" ws type_name
+type_name ::= "i32" | "f64" | "bool" | "arr_i32" | "string" | ident
 
-expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | block_expr | call_expr | return_expr | arr_new_expr | arr_get_expr | arr_set_expr | arr_len_expr | arr_lit_expr | print_str_expr | println_str_expr | print_i32_expr | print_f64_expr | str_len_expr | str_concat_expr
+expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | block_expr | call_expr | return_expr | arr_new_expr | arr_get_expr | arr_set_expr | arr_len_expr | arr_lit_expr | struct_new_expr | struct_get_expr | struct_set_expr | print_str_expr | println_str_expr | print_i32_expr | print_f64_expr | str_len_expr | str_concat_expr
 
 literal ::= float_lit | int_lit | bool_lit | string_lit
 int_lit ::= "-"? [0-9]+
@@ -27,7 +28,7 @@ binary_op ::= "(" ws bin_op ws expr ws expr ws ")"
 bin_op ::= "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<=" | ">=" | "<" | ">" | "and" | "or"
 
 unary_op ::= "(" ws ("not" | "neg") ws expr ws ")"
-if_expr ::= "(" ws "if" ws expr ws expr ws expr? ws ")"
+if_expr ::= "(" ws "if" ws expr ws expr (ws expr)? ws ")"
 while_expr ::= "(" ws "while" ws expr ws expr+ ws ")"
 block_expr ::= "(" ws ("block" | "do") ws expr+ ws ")"
 call_expr ::= "(" ws "call" ws ident (ws expr)* ws ")"
@@ -38,6 +39,10 @@ arr_get_expr ::= "(" ws "arr_get" ws expr ws expr ws ")"
 arr_set_expr ::= "(" ws "arr_set" ws expr ws expr ws expr ws ")"
 arr_len_expr ::= "(" ws "arr_len" ws expr ws ")"
 arr_lit_expr ::= "(" ws "array" (ws expr)* ws ")"
+
+struct_new_expr ::= "(" ws ("struct_new" | "new") ws ident (ws expr)* ws ")"
+struct_get_expr ::= "(" ws ("struct_get" | ".") ws expr ws ident ws ")"
+struct_set_expr ::= "(" ws "struct_set" ws expr ws ident ws expr ws ")"
 
 print_str_expr ::= "(" ws "print" ws expr ws ")"
 println_str_expr ::= "(" ws "println" ws expr ws ")"
