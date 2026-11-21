@@ -1,0 +1,9 @@
+;; Fibonacci calculation in AI-Native Language (AIL)
+(fn fib (n: i32) -> i32
+  (if (<= n 1)
+    n
+    (+ (call fib (- n 1))
+       (call fib (- n 2)))))
+
+(fn main () -> i32
+  (call fib 10))

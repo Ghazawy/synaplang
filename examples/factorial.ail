@@ -1,0 +1,8 @@
+;; Factorial calculation in AI-Native Language (AIL)
+(fn factorial (n: i32) -> i32
+  (if (<= n 1)
+    1
+    (* n (call factorial (- n 1)))))
+
+(fn main () -> i32
+  (call factorial 6))

@@ -1,0 +1,80 @@
+// AI-Native Language (AIL) Grammar Specification for Lark
+
+start: module | top_level_list
+
+module: "(" "module" top_level* ")"
+top_level_list: top_level*
+
+?top_level: fn_def
+
+fn_def: "(" "fn" CNAME param_list return_type? expr+ ")"
+
+param_list: "(" param* ")"
+          | "[" param* "]"
+
+param: CNAME ":" type_name
+     | "(" CNAME ":" type_name ")"
+     | "[" CNAME ":" type_name "]"
+     | CNAME type_name
+
+return_type: "->" type_name
+           | type_name
+
+type_name: "i32" -> type_i32
+         | "f64" -> type_f64
+         | "bool" -> type_bool
+
+?expr: literal
+     | var_ref
+     | let_expr
+     | set_expr
+     | binary_op
+     | unary_op
+     | if_expr
+     | while_expr
+     | block_expr
+     | call_expr
+     | return_expr
+
+literal: SIGNED_FLOAT -> float_lit
+       | SIGNED_INT   -> int_lit
+       | "true"       -> bool_true
+       | "false"      -> bool_false
+
+var_ref: CNAME
+
+let_expr: "(" "let" CNAME ":" type_name expr ")"
+        | "(" "let" CNAME type_name expr ")"
+        | "(" "let" "(" CNAME ":" type_name ")" expr ")"
+
+set_expr: "(" "set" CNAME expr ")"
+
+binary_op: "(" bin_op expr expr ")"
+
+!bin_op: "+" | "-" | "*" | "/" | "%"
+       | "==" | "!=" | "<=" | ">=" | "<" | ">"
+       | "and" | "or"
+
+unary_op: "(" UNARY_OP expr ")"
+
+UNARY_OP: "not" | "neg"
+
+if_expr: "(" "if" expr expr expr? ")"
+
+while_expr: "(" "while" expr expr+ ")"
+
+block_expr: "(" "do" expr+ ")"
+          | "(" "block" expr+ ")"
+
+call_expr: "(" "call" CNAME expr* ")"
+
+return_expr: "(" "return" expr ")"
+
+COMMENT: /;[^\n]*/
+%ignore COMMENT
+
+%import common.CNAME
+%import common.SIGNED_INT
+%import common.SIGNED_FLOAT
+%import common.WS
+%ignore WS

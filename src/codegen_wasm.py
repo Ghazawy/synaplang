@@ -1,0 +1,222 @@
+from typing import List, Dict, Set as PySet
+from src.ail_ast import (
+    Module, Function, Param, Expr, Literal, VarRef, Let, Set,
+    BinaryOp, UnaryOp, If, While, Block, Call, Return, Type
+)
+
+def wasm_type(t: str) -> str:
+    if t == Type.I32 or t == Type.BOOL:
+        return "i32"
+    if t == Type.F64:
+        return "f64"
+    return "i32"
+
+class WasmCodegen:
+    def __init__(self):
+        self.label_counter = 0
+
+    def _next_label(self, prefix: str = "label") -> str:
+        self.label_counter += 1
+        return f"${prefix}_{self.label_counter}"
+
+    def generate(self, module: Module) -> str:
+        self.label_counter = 0
+        lines = ["(module"]
+        
+        for fn in module.functions:
+            lines.append(self._generate_function(fn))
+
+        lines.append(")")
+        return "\n".join(lines)
+
+    def _collect_locals(self, exprs: List[Expr], param_names: PySet[str]) -> Dict[str, str]:
+        locals_dict: Dict[str, str] = {}
+
+        def walk(e: Expr):
+            if isinstance(e, Let):
+                if e.name not in param_names:
+                    locals_dict[e.name] = wasm_type(e.type_name)
+                if e.value:
+                    walk(e.value)
+            elif isinstance(e, Set):
+                if e.value:
+                    walk(e.value)
+            elif isinstance(e, BinaryOp):
+                walk(e.left)
+                walk(e.right)
+            elif isinstance(e, UnaryOp):
+                walk(e.expr)
+            elif isinstance(e, If):
+                walk(e.cond)
+                walk(e.then_branch)
+                if e.else_branch:
+                    walk(e.else_branch)
+            elif isinstance(e, While):
+                walk(e.cond)
+                for b in e.body:
+                    walk(b)
+            elif isinstance(e, Block):
+                for b in e.exprs:
+                    walk(b)
+            elif isinstance(e, Call):
+                for a in e.args:
+                    walk(a)
+            elif isinstance(e, Return):
+                if e.expr:
+                    walk(e.expr)
+
+        for e in exprs:
+            walk(e)
+        return locals_dict
+
+    def _generate_function(self, fn: Function) -> str:
+        param_names = {p.name for p in fn.params}
+        locals_dict = self._collect_locals(fn.body, param_names)
+
+        fn_parts = [f'  (func ${fn.name} (export "{fn.name}")']
+        
+        for p in fn.params:
+            fn_parts.append(f' (param ${p.name} {wasm_type(p.type_name)})')
+            
+        if fn.return_type != Type.VOID:
+            fn_parts.append(f' (result {wasm_type(fn.return_type)})')
+
+        fn_parts.append("\n")
+
+        # Local variables declarations
+        for name, t in locals_dict.items():
+            fn_parts.append(f'    (local ${name} {t})\n')
+
+        # Function body
+        num_exprs = len(fn.body)
+        for i, expr in enumerate(fn.body):
+            is_last = (i == num_exprs - 1)
+            code = self._generate_expr(expr, indent=4)
+            
+            # If not the last expression and it yields a value on the stack, drop it
+            expr_type = getattr(expr, "inferred_type", None)
+            if not is_last and expr_type and expr_type != Type.VOID and not isinstance(expr, (Let, Set, While)):
+                code = f"    (drop\n  {code}\n    )"
+            fn_parts.append(f"{code}\n")
+
+        fn_parts.append("  )")
+        return "".join(fn_parts)
+
+    def _generate_expr(self, expr: Expr, indent: int = 4) -> str:
+        sp = " " * indent
+        if isinstance(expr, Literal):
+            if expr.type_name == Type.I32:
+                return f"{sp}(i32.const {int(expr.value)})"
+            elif expr.type_name == Type.F64:
+                val = float(expr.value)
+                return f"{sp}(f64.const {val})"
+            elif expr.type_name == Type.BOOL:
+                val = 1 if expr.value else 0
+                return f"{sp}(i32.const {val})"
+
+        if isinstance(expr, VarRef):
+            return f"{sp}(local.get ${expr.name})"
+
+        if isinstance(expr, Let):
+            val_code = self._generate_expr(expr.value, indent + 2)
+            return f"{sp}(local.set ${expr.name}\n{val_code}\n{sp})"
+
+        if isinstance(expr, Set):
+            val_code = self._generate_expr(expr.value, indent + 2)
+            return f"{sp}(local.set ${expr.name}\n{val_code}\n{sp})"
+
+        if isinstance(expr, BinaryOp):
+            left_code = self._generate_expr(expr.left, indent + 2)
+            right_code = self._generate_expr(expr.right, indent + 2)
+            t = getattr(expr.left, "inferred_type", Type.I32)
+            prefix = "f64" if t == Type.F64 else "i32"
+
+            op_map = {
+                "+": f"{prefix}.add",
+                "-": f"{prefix}.sub",
+                "*": f"{prefix}.mul",
+                "/": f"{prefix}.div_s" if prefix == "i32" else "f64.div",
+                "%": "i32.rem_s",
+                "==": f"{prefix}.eq",
+                "!=": f"{prefix}.ne",
+                "<": f"{prefix}.lt_s" if prefix == "i32" else "f64.lt",
+                "<=": f"{prefix}.le_s" if prefix == "i32" else "f64.le",
+                ">": f"{prefix}.gt_s" if prefix == "i32" else "f64.gt",
+                ">=": f"{prefix}.ge_s" if prefix == "i32" else "f64.ge",
+                "and": "i32.and",
+                "or": "i32.or",
+            }
+            instr = op_map.get(expr.op, f"{prefix}.add")
+            return f"{sp}({instr}\n{left_code}\n{right_code}\n{sp})"
+
+        if isinstance(expr, UnaryOp):
+            inner_code = self._generate_expr(expr.expr, indent + 2)
+            if expr.op == "not":
+                return f"{sp}(i32.eqz\n{inner_code}\n{sp})"
+            if expr.op == "neg":
+                t = getattr(expr.expr, "inferred_type", Type.I32)
+                if t == Type.F64:
+                    return f"{sp}(f64.neg\n{inner_code}\n{sp})"
+                else:
+                    return f"{sp}(i32.sub\n{sp}  (i32.const 0)\n{inner_code}\n{sp})"
+
+        if isinstance(expr, If):
+            cond_code = self._generate_expr(expr.cond, indent + 2)
+            then_code = self._generate_expr(expr.then_branch, indent + 4)
+            res_type = getattr(expr, "inferred_type", Type.VOID)
+            res_str = f" (result {wasm_type(res_type)})" if res_type != Type.VOID else ""
+
+            if expr.else_branch:
+                else_code = self._generate_expr(expr.else_branch, indent + 4)
+                return (
+                    f"{sp}(if{res_str}\n"
+                    f"{cond_code}\n"
+                    f"{sp}  (then\n{then_code}\n{sp}  )\n"
+                    f"{sp}  (else\n{else_code}\n{sp}  )\n"
+                    f"{sp})"
+                )
+            else:
+                return (
+                    f"{sp}(if\n"
+                    f"{cond_code}\n"
+                    f"{sp}  (then\n{then_code}\n{sp}  )\n"
+                    f"{sp})"
+                )
+
+        if isinstance(expr, While):
+            break_lbl = self._next_label("break")
+            loop_lbl = self._next_label("loop")
+            cond_code = self._generate_expr(expr.cond, indent + 4)
+            body_lines = [self._generate_expr(b, indent + 4) for b in expr.body]
+            body_str = "\n".join(body_lines)
+
+            return (
+                f"{sp}(block {break_lbl}\n"
+                f"{sp}  (loop {loop_lbl}\n"
+                f"{sp}    (br_if {break_lbl}\n"
+                f"{sp}      (i32.eqz\n{cond_code}\n{sp}      )\n"
+                f"{sp}    )\n"
+                f"{body_str}\n"
+                f"{sp}    (br {loop_lbl})\n"
+                f"{sp}  )\n"
+                f"{sp})"
+            )
+
+        if isinstance(expr, Block):
+            lines = [self._generate_expr(b, indent + 2) for b in expr.exprs]
+            joined = "\n".join(lines)
+            return f"{sp}(block\n{joined}\n{sp})"
+
+        if isinstance(expr, Call):
+            args_code = [self._generate_expr(a, indent + 2) for a in expr.args]
+            args_str = "\n".join(args_code)
+            if args_str:
+                return f"{sp}(call ${expr.fn_name}\n{args_str}\n{sp})"
+            else:
+                return f"{sp}(call ${expr.fn_name})"
+
+        if isinstance(expr, Return):
+            val_code = self._generate_expr(expr.expr, indent + 2)
+            return f"{sp}(return\n{val_code}\n{sp})"
+
+        return f"{sp};; unknown expr"
