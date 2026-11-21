@@ -57,8 +57,8 @@ flowchart LR
 ### 1. Installation
 Clone the repository and install dependencies:
 ```bash
-git clone https://github.com/your-username/ai-lang.git
-cd ai-lang
+git clone https://github.com/Ghazawy/synaplang.git
+cd synaplang
 pip install -r requirements.txt
 ```
 
