@@ -24,6 +24,7 @@ type_name: "i32"     -> type_i32
          | "f64"     -> type_f64
          | "bool"    -> type_bool
          | "arr_i32" -> type_arr_i32
+         | "string"  -> type_string
 
 ?expr: literal
      | var_ref
@@ -41,11 +42,18 @@ type_name: "i32"     -> type_i32
      | arr_set_expr
      | arr_len_expr
      | arr_lit_expr
+     | print_str_expr
+     | println_str_expr
+     | print_i32_expr
+     | print_f64_expr
+     | str_len_expr
+     | str_concat_expr
 
-literal: SIGNED_FLOAT -> float_lit
-       | SIGNED_INT   -> int_lit
-       | "true"       -> bool_true
-       | "false"      -> bool_false
+literal: SIGNED_FLOAT   -> float_lit
+       | SIGNED_INT     -> int_lit
+       | "true"         -> bool_true
+       | "false"        -> bool_false
+       | ESCAPED_STRING -> string_lit
 
 var_ref: CNAME
 
@@ -82,11 +90,19 @@ arr_set_expr: "(" "arr_set" expr expr expr ")"
 arr_len_expr: "(" "arr_len" expr ")"
 arr_lit_expr: "(" "array" expr* ")"
 
+print_str_expr: "(" "print" expr ")"
+println_str_expr: "(" "println" expr ")"
+print_i32_expr: "(" "print_i32" expr ")"
+print_f64_expr: "(" "print_f64" expr ")"
+str_len_expr: "(" "str_len" expr ")"
+str_concat_expr: "(" "str_concat" expr expr ")"
+
 COMMENT: /;[^\n]*/
 %ignore COMMENT
 
 %import common.CNAME
 %import common.SIGNED_INT
 %import common.SIGNED_FLOAT
+%import common.ESCAPED_STRING
 %import common.WS
 %ignore WS

@@ -4,6 +4,7 @@ from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
     BinaryOp, UnaryOp, If, While, Block, Call, Return,
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
     Type, SourceLocation
 )
 
@@ -29,6 +30,9 @@ class ASTBuilder(Transformer):
     def type_arr_i32(self, meta, children):
         return Type.ARR_I32
 
+    def type_string(self, meta, children):
+        return Type.STRING
+
     def param(self, meta, children):
         name = str(children[0])
         type_name = str(children[1])
@@ -51,6 +55,16 @@ class ASTBuilder(Transformer):
 
     def bool_false(self, meta, children):
         return Literal(loc=_get_loc(meta), value=False, type_name=Type.BOOL)
+
+    def string_lit(self, meta, children):
+        raw = str(children[0])
+        # strip surrounding quotes and decode escape characters
+        inner = raw[1:-1]
+        try:
+            val = inner.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            val = inner
+        return Literal(loc=_get_loc(meta), value=val, type_name=Type.STRING)
 
     def var_ref(self, meta, children):
         return VarRef(loc=_get_loc(meta), name=str(children[0]))
@@ -117,13 +131,31 @@ class ASTBuilder(Transformer):
     def arr_lit_expr(self, meta, children):
         return ArrLit(loc=_get_loc(meta), elements=children)
 
+    def print_str_expr(self, meta, children):
+        return PrintStr(loc=_get_loc(meta), expr=children[0])
+
+    def println_str_expr(self, meta, children):
+        return PrintlnStr(loc=_get_loc(meta), expr=children[0])
+
+    def print_i32_expr(self, meta, children):
+        return PrintI32(loc=_get_loc(meta), expr=children[0])
+
+    def print_f64_expr(self, meta, children):
+        return PrintF64(loc=_get_loc(meta), expr=children[0])
+
+    def str_len_expr(self, meta, children):
+        return StrLen(loc=_get_loc(meta), expr=children[0])
+
+    def str_concat_expr(self, meta, children):
+        return StrConcat(loc=_get_loc(meta), left=children[0], right=children[1])
+
     def fn_def(self, meta, children):
         name = str(children[0])
         idx = 1
         params = children[idx]
         idx += 1
         ret_type = Type.VOID
-        if idx < len(children) and isinstance(children[idx], str) and children[idx] in (Type.I32, Type.F64, Type.BOOL, Type.VOID, Type.ARR_I32):
+        if idx < len(children) and isinstance(children[idx], str) and children[idx] in (Type.I32, Type.F64, Type.BOOL, Type.VOID, Type.ARR_I32, Type.STRING):
             ret_type = children[idx]
             idx += 1
         body = children[idx:]

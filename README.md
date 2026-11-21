@@ -21,9 +21,10 @@ For over seventy years, programming languages were designed to cater to human bi
 1. **Homoiconic S-Expressions:** The syntax *is* the Abstract Syntax Tree (AST). 1:1 bijection. Zero parsing ambiguity.
 2. **Machine-Readable Diagnostics:** When an error occurs, the compiler outputs structured **JSON** with exact AST locations and actionable suggested fixes for instant self-healing.
 3. **Bare-Metal Speed with WebAssembly:** Directly compiles to WebAssembly (`.wat` / Wasm) for near-C execution performance inside a sandboxed environment.
-4. **Strict Static Typing:** Catch 100% of type bugs at compile time (`i32`, `f64`, `bool`, `arr_i32`).
+4. **Strict Static Typing:** Catch 100% of type bugs at compile time (`i32`, `f64`, `bool`, `arr_i32`, `string`).
 5. **Linear Memory & Arrays:** Built-in dynamic and static array primitives (`arr_new`, `arr_get`, `arr_set`, `arr_len`, `array`) managed in WebAssembly linear memory.
-6. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
+6. **Strings & Host Printing:** Built-in string literals, dynamic concatenation (`str_concat`), and zero-overhead host I/O (`print`, `println`, `print_i32`, `print_f64`).
+7. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
 
 ---
 
@@ -50,7 +51,8 @@ flowchart LR
 | **Whitespace Impact** | Significant indentation errors | Whitespace invariant |
 | **Compiler Feedback** | Human prose & ASCII error strings | **Structured JSON diagnostics with auto-fix hints** |
 | **Execution Model** | Slow dynamic runtime or heavy toolchains | **Blazing-fast sandboxed WebAssembly (Wasm)** |
-| **Memory & Data** | Garbage collectors or manual pointers | **Safe Linear Memory arrays (`arr_i32`)** |
+| **Memory & Data** | Garbage collectors or manual pointers | **Safe Linear Memory arrays (`arr_i32`) & strings** |
+| **I/O Integration** | Heavy system libraries | **Direct Host Function Calls (`print`, `println`)** |
 | **Context Window Cost**| Heavy boilerplate & token fragmentation | Minimal token overhead, maximum semantic density |
 
 ---
@@ -67,18 +69,24 @@ pip install -r requirements.txt
 
 ### 2. Run Examples
 ```bash
-# Fibonacci
-python src/cli.py run examples/fibonacci.ail --fn main
-# Output: 55
+# Strings & Host Printing
+python src/cli.py run examples/hello_strings.ail --fn main
+# Output:
+# Hello, Autonomous AI Agent!
+# Total message length: 27
 
 # WebAssembly Linear Memory Arrays
 python src/cli.py run examples/array_demo.ail --fn main
 # Output: 220
+
+# Fibonacci Algorithm
+python src/cli.py run examples/fibonacci.ail --fn main
+# Output: 55
 ```
 
 ### 3. Check Code with Machine JSON Diagnostics
 ```bash
-python src/cli.py check examples/fibonacci.ail --json
+python src/cli.py check examples/hello_strings.ail --json
 ```
 Output:
 ```json
@@ -93,17 +101,17 @@ If you introduce a type error, the compiler outputs actionable structured data:
 {
   "status": "error",
   "error_type": "TypeMismatch",
-  "message": "Binary operator '+' requires identical operand types, got 'i32' and 'f64'",
+  "message": "println expects string argument, got 'i32'",
   "location": {
     "line": 3,
     "column": 12
   },
   "context": {
-    "node": "BinaryOp",
-    "expected_type": "i32",
-    "found_type": "f64"
+    "node": "PrintlnStr",
+    "expected_type": "string",
+    "found_type": "i32"
   },
-  "suggested_fix": "Ensure both operands are of the same arithmetic type ('i32')"
+  "suggested_fix": "Pass a string expression to (println ...)"
 }
 ```
 
@@ -116,6 +124,18 @@ Exports `grammar/synap.gbnf` for grammar-constrained sampling.
 ---
 
 ## 💻 Language Syntax at a Glance
+
+### Strings & Host Printing:
+```lisp
+(fn main () -> i32
+  (let greeting: string "Hello, ")
+  (let target: string "Autonomous AI Agent!")
+  (let full_message: string (str_concat greeting target))
+  (println full_message)
+  (print "Total length: ")
+  (print_i32 (str_len full_message))
+  (str_len full_message))
+```
 
 ### Arrays & WebAssembly Linear Memory:
 ```lisp
@@ -146,20 +166,6 @@ Exports `grammar/synap.gbnf` for grammar-constrained sampling.
   (call fib 10))
 ```
 
-### While Loop Accumulator:
-```lisp
-(fn sum_up_to (n: i32) -> i32
-  (let total: i32 0)
-  (let i: i32 1)
-  (while (<= i n)
-    (set total (+ total i))
-    (set i (+ i 1)))
-  total)
-
-(fn main () -> i32
-  (call sum_up_to 100))
-```
-
 ---
 
 ## 🧪 Running Automated Tests
@@ -168,7 +174,7 @@ Run the full automated test suite with `pytest`:
 ```bash
 pytest
 ```
-All **25 tests** verify arithmetic, linear memory arrays, nested precedence, control flow, recursion, type checking, and automated agent self-healing loops.
+All **31 tests** verify arithmetic, strings, host print functions, linear memory arrays, nested precedence, control flow, recursion, type checking, and automated agent self-healing loops.
 
 ---
 

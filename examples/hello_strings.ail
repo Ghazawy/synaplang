@@ -1,0 +1,17 @@
+;; String primitives, dynamic concatenation, and Host Printing in SynapLang
+
+(fn main () -> i32
+  ;; Define strings
+  (let greeting: string "Hello, ")
+  (let target: string "Autonomous AI Agent!")
+  
+  ;; Concatenate strings dynamically in WebAssembly memory
+  (let full_message: string (str_concat greeting target))
+  
+  ;; Print using the Host Print functions
+  (println full_message)
+  (print "Total message length: ")
+  (print_i32 (str_len full_message))
+  
+  ;; Return length
+  (str_len full_message))

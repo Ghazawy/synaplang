@@ -7,6 +7,7 @@ class Type:
     BOOL = "bool"
     VOID = "void"
     ARR_I32 = "arr_i32"
+    STRING = "string"
     UNKNOWN = "unknown"
 
     @classmethod
@@ -22,6 +23,8 @@ class Type:
             return cls.VOID
         if s in ("arr_i32", "array", "i32[]", "int[]", "arr"):
             return cls.ARR_I32
+        if s in ("string", "str"):
+            return cls.STRING
         raise ValueError(f"Unknown type: {s}")
 
 @dataclass
@@ -39,7 +42,7 @@ class Expr(ASTNode):
 
 @dataclass
 class Literal(Expr):
-    value: Union[int, float, bool] = 0
+    value: Union[int, float, bool, str] = 0
     type_name: str = Type.I32
 
 @dataclass
@@ -114,6 +117,31 @@ class ArrLen(Expr):
 @dataclass
 class ArrLit(Expr):
     elements: List[Expr] = field(default_factory=list)
+
+@dataclass
+class PrintStr(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class PrintlnStr(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class PrintI32(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class PrintF64(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class StrLen(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class StrConcat(Expr):
+    left: Optional[Expr] = None
+    right: Optional[Expr] = None
 
 @dataclass
 class Param(ASTNode):

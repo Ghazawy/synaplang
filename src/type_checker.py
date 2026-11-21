@@ -4,6 +4,7 @@ from src.ail_ast import (
     Module, Function, Param, Expr, Literal, VarRef, Let, Set,
     BinaryOp, UnaryOp, If, While, Block, Call, Return,
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
+    PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
     Type, ASTNode
 )
 
@@ -106,7 +107,6 @@ class TypeChecker:
             last_type = self._check_expr(expr, fn.return_type)
 
         if fn.return_type != Type.VOID and last_type != fn.return_type:
-            # Check if there is an explicit return in the body
             has_explicit_return = any(isinstance(e, Return) for e in fn.body)
             if not has_explicit_return:
                 raise TypeErrorException(
@@ -439,5 +439,90 @@ class TypeChecker:
                     )
             expr.inferred_type = Type.ARR_I32
             return Type.ARR_I32
+
+        if isinstance(expr, PrintStr):
+            t = self._check_expr(expr.expr, expected_return)
+            if t != Type.STRING:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"print expects string argument, got '{t}'",
+                    expr,
+                    expected=Type.STRING,
+                    found=t,
+                    suggested_fix="Pass a string expression to (print ...)"
+                )
+            expr.inferred_type = Type.VOID
+            return Type.VOID
+
+        if isinstance(expr, PrintlnStr):
+            t = self._check_expr(expr.expr, expected_return)
+            if t != Type.STRING:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"println expects string argument, got '{t}'",
+                    expr,
+                    expected=Type.STRING,
+                    found=t,
+                    suggested_fix="Pass a string expression to (println ...)"
+                )
+            expr.inferred_type = Type.VOID
+            return Type.VOID
+
+        if isinstance(expr, PrintI32):
+            t = self._check_expr(expr.expr, expected_return)
+            if t != Type.I32:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"print_i32 expects i32 argument, got '{t}'",
+                    expr,
+                    expected=Type.I32,
+                    found=t,
+                    suggested_fix="Pass an i32 expression to (print_i32 ...)"
+                )
+            expr.inferred_type = Type.VOID
+            return Type.VOID
+
+        if isinstance(expr, PrintF64):
+            t = self._check_expr(expr.expr, expected_return)
+            if t != Type.F64:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"print_f64 expects f64 argument, got '{t}'",
+                    expr,
+                    expected=Type.F64,
+                    found=t,
+                    suggested_fix="Pass an f64 expression to (print_f64 ...)"
+                )
+            expr.inferred_type = Type.VOID
+            return Type.VOID
+
+        if isinstance(expr, StrLen):
+            t = self._check_expr(expr.expr, expected_return)
+            if t != Type.STRING:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"str_len expects string argument, got '{t}'",
+                    expr,
+                    expected=Type.STRING,
+                    found=t,
+                    suggested_fix="Pass a string expression to (str_len ...)"
+                )
+            expr.inferred_type = Type.I32
+            return Type.I32
+
+        if isinstance(expr, StrConcat):
+            lt = self._check_expr(expr.left, expected_return)
+            rt = self._check_expr(expr.right, expected_return)
+            if lt != Type.STRING or rt != Type.STRING:
+                raise TypeErrorException(
+                    "TypeMismatch",
+                    f"str_concat requires both arguments to be string, got '{lt}' and '{rt}'",
+                    expr,
+                    expected=Type.STRING,
+                    found=f"{lt}, {rt}",
+                    suggested_fix="Pass two string expressions to (str_concat ...)"
+                )
+            expr.inferred_type = Type.STRING
+            return Type.STRING
 
         raise TypeErrorException("UnknownExpression", f"Unknown AST expression node '{type(expr).__name__}'", expr)
