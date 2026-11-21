@@ -1,11 +1,11 @@
-# ⚡ AIL: The AI-Native Programming Language
+# ⚡ SynapLang: The AI-Native Programming Language
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
 [![Target: WebAssembly](https://img.shields.io/badge/target-WebAssembly-654FF0.svg)](https://webassembly.org/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-> *"Human code is legacy. Software is no longer written for human eyes—it is synthesized by neural models and executed on bare metal. AIL is the first programming language built from scratch for Large Language Models and autonomous coding agents."*
+> *"Human code is legacy. Software is no longer written for human eyes—it is synthesized by neural models and executed on bare metal. SynapLang is the first programming language built from scratch for Large Language Models and autonomous coding agents."*
 
 ---
 

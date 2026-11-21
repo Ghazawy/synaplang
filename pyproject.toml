@@ -3,14 +3,14 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ai-lang"
+name = "synaplang"
 version = "0.1.0"
-description = "AI-Native Programming Language (AIL) targeting WebAssembly"
+description = "SynapLang: AI-Native Programming Language targeting WebAssembly"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "AIL Open Source Community"}
+    {name = "SynapLang Open Source Community"}
 ]
 dependencies = [
     "lark>=1.1.0",
@@ -23,6 +23,7 @@ dev = [
 ]
 
 [project.scripts]
+synap = "src.cli:main"
 ail = "src.cli:main"
 
 [tool.pytest.ini_options]
