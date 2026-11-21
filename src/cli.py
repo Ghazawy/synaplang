@@ -31,8 +31,26 @@ def main():
     check_parser.add_argument("file", help="Path to .ail source file")
     check_parser.add_argument("--json", action="store_true", help="Output machine-readable JSON diagnostics")
 
+    # Command: export-gbnf
+    gbnf_parser = subparsers.add_parser("export-gbnf", help="Export GBNF grammar for llama.cpp / Ollama")
+    gbnf_parser.add_argument("-o", "--output", default="grammar/synap.gbnf", help="Output file path (default: grammar/synap.gbnf)")
+
     args = parser.parse_args()
     runner = Runner()
+
+    if args.command == "export-gbnf":
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        source_gbnf = os.path.join(base_dir, "grammar", "synap.gbnf")
+        with open(source_gbnf, "r", encoding="utf-8") as f:
+            content = f.read()
+        out_path = args.output
+        if not os.path.isabs(out_path):
+            out_path = os.path.join(os.getcwd(), out_path)
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"Successfully exported GBNF grammar to '{out_path}'")
+        sys.exit(0)
 
     if not os.path.exists(args.file):
         error_payload = {

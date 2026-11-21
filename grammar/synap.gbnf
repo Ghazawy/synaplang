@@ -1,0 +1,36 @@
+# SynapLang GBNF Grammar for llama.cpp and Ollama Constrained Decoding
+
+root ::= module | fn_def+
+
+module ::= "(" ws "module" ws fn_def* ")"
+fn_def ::= "(" ws "fn" ws ident ws param_list ws return_type? ws expr+ ")"
+
+param_list ::= "(" ws (param ws)* ")" | "[" ws (param ws)* "]"
+param ::= ident ws ":" ws type_name | ident ws type_name
+
+return_type ::= "->" ws type_name | type_name
+type_name ::= "i32" | "f64" | "bool"
+
+expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | block_expr | call_expr | return_expr
+
+literal ::= float_lit | int_lit | bool_lit
+int_lit ::= "-"? [0-9]+
+float_lit ::= "-"? [0-9]+ "." [0-9]+
+bool_lit ::= "true" | "false"
+
+var_ref ::= ident
+let_expr ::= "(" ws "let" ws ident ws ":" ws type_name ws expr ws ")" | "(" ws "let" ws ident ws type_name ws expr ws ")"
+set_expr ::= "(" ws "set" ws ident ws expr ws ")"
+
+binary_op ::= "(" ws bin_op ws expr ws expr ws ")"
+bin_op ::= "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<=" | ">=" | "<" | ">" | "and" | "or"
+
+unary_op ::= "(" ws ("not" | "neg") ws expr ws ")"
+if_expr ::= "(" ws "if" ws expr ws expr ws expr? ws ")"
+while_expr ::= "(" ws "while" ws expr ws expr+ ws ")"
+block_expr ::= "(" ws ("block" | "do") ws expr+ ws ")"
+call_expr ::= "(" ws "call" ws ident (ws expr)* ws ")"
+return_expr ::= "(" ws "return" ws expr ws ")"
+
+ident ::= [a-zA-Z_] [a-zA-Z0-9_]*
+ws ::= [ \t\n\r]*
