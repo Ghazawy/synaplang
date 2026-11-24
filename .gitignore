@@ -11,3 +11,6 @@ build/
 .env
 venv/
 .venv/
+.github/
+uv.lock
+

@@ -6,12 +6,12 @@ import os
 # Ensure package root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.runner import Runner
+from src.runner import Runner, SynapRuntimeError, OutOfFuelError
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="ail",
-        description="AI-Native Programming Language (AIL) Toolchain"
+        prog="synap",
+        description="SynapLang - AI-Native Programming Language Toolchain"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -19,6 +19,7 @@ def main():
     run_parser = subparsers.add_parser("run", help="Compile and execute an AIL source file in Wasmtime")
     run_parser.add_argument("file", help="Path to .ail source file")
     run_parser.add_argument("--fn", default="main", help="Function name to execute (default: main)")
+    run_parser.add_argument("--fuel", type=int, default=1_000_000, help="Instruction fuel limit (default: 1,000,000)")
     run_parser.add_argument("args", nargs="*", help="Arguments to pass to the function")
 
     # Command: compile
@@ -30,6 +31,18 @@ def main():
     check_parser = subparsers.add_parser("check", help="Type-check an AIL source file")
     check_parser.add_argument("file", help="Path to .ail source file")
     check_parser.add_argument("--json", action="store_true", help="Output machine-readable JSON diagnostics")
+
+    # Command: patch
+    patch_parser = subparsers.add_parser("patch", help="Surgically patch an AST node in an AIL source file")
+    patch_parser.add_argument("file", help="Path to .ail source file")
+    patch_parser.add_argument("--path", required=True, help="AST target path (e.g. @fn:main.body[0])")
+    patch_parser.add_argument("--code", required=True, help="Replacement S-expression code")
+    patch_parser.add_argument("-o", "--output", help="Output path (default: in-place overwrite)")
+
+    # Command: serve-mcp
+    mcp_parser = subparsers.add_parser("serve-mcp", help="Start Model Context Protocol (MCP) tool server for an AIL file")
+    mcp_parser.add_argument("file", help="Path to .ail source file")
+    mcp_parser.add_argument("--fuel", type=int, default=1_000_000, help="Instruction fuel limit per tool call (default: 1,000,000)")
 
     # Command: export-gbnf
     gbnf_parser = subparsers.add_parser("export-gbnf", help="Export GBNF grammar for llama.cpp / Ollama")
@@ -73,10 +86,29 @@ def main():
             print(f"Error: {error_payload['message']}", file=sys.stderr)
         sys.exit(1)
 
+    if args.command == "serve-mcp":
+        from src.mcp_server import serve_stdio
+        serve_stdio(args.file, fuel=args.fuel)
+        sys.exit(0)
+
     with open(args.file, "r", encoding="utf-8") as f:
         source = f.read()
 
-    if args.command == "check":
+    if args.command == "patch":
+        from src.patcher import ASTPatcher
+        patcher = ASTPatcher()
+        try:
+            patched_code = patcher.patch(source, args.path, args.code)
+            out_target = args.output or args.file
+            with open(out_target, "w", encoding="utf-8") as f:
+                f.write(patched_code)
+            print(f"Successfully applied AST patch at '{args.path}' -> saved to '{out_target}'")
+            sys.exit(0)
+        except Exception as e:
+            print(f"AST Patch Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    elif args.command == "check":
         diag = runner.check_source(source)
         if args.json:
             print(json.dumps(diag, indent=2))
@@ -112,10 +144,15 @@ def main():
                     except ValueError:
                         parsed_args.append(a)
 
-            result = runner.execute_function(source, args.fn, *parsed_args)
+            result = runner.execute_function(source, args.fn, *parsed_args, fuel=args.fuel)
             if result is not None:
                 print(result)
             sys.exit(0)
+        except SynapRuntimeError as e:
+            print(f"Runtime Error [{e.error_type}]: {e.message}", file=sys.stderr)
+            if e.suggested_fix:
+                print(f"Fix: {e.suggested_fix}", file=sys.stderr)
+            sys.exit(1)
         except Exception as e:
             print(f"Execution error: {e}", file=sys.stderr)
             sys.exit(1)

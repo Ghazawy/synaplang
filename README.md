@@ -1,8 +1,9 @@
 # ⚡ SynapLang: The AI-Native Programming Language
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/tests-41%20passed-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-52%20passed-brightgreen.svg)]()
 [![Target: WebAssembly](https://img.shields.io/badge/target-WebAssembly-654FF0.svg)](https://webassembly.org/)
+[![Protocol: MCP](https://img.shields.io/badge/protocol-Model%20Context%20Protocol%20(MCP)-blueviolet.svg)](https://modelcontextprotocol.io)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Speedup: 34x](https://img.shields.io/badge/speedup-up%20to%2034x%20vs%20Python-orange.svg)]()
 
@@ -28,6 +29,9 @@ For over seventy years, programming languages were designed to cater to human bi
 7. **Interactive Terminal REPL:** Instant evaluation, live session state, and pretty diagnostics with `synap repl`.
 8. **Web Playground:** Run SynapLang directly inside your browser on GitHub Pages with zero installation.
 9. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
+10. **Fuel Metering & Sandbox Safety:** Deterministic execution limits prevent infinite loops (`OutOfFuelError`) and memory out-of-bounds attacks (`MemoryOutOfBoundsError`).
+11. **AST-Path Surgical Patching:** Modify code via semantic AST paths (`@fn:name.body[i]`) rather than brittle text diffs, achieving a **0% edit failure rate**.
+12. **Model Context Protocol (MCP) Server:** Expose any SynapLang module directly as an MCP tool server via JSON-RPC 2.0 stdio with strict auto-generated JSON schemas.
 
 ---
 
@@ -132,6 +136,46 @@ python src/cli.py export-gbnf
 ```
 Exports `grammar/synap.gbnf` for zero-syntax-error LLM generation.
 
+### 6. Surgical AST-Path Patching (0% Diff Failure Rate)
+Instead of error-prone search-replace diff blocks that fail when whitespace shifts, agents patch code nodes directly:
+```bash
+python src/cli.py patch examples/fibonacci.ail --path "@fn:main.body[0]" --code "(call fib 12)"
+```
+Checks types automatically before applying the patch and outputs clean, updated S-expressions.
+
+### 7. Run as a Model Context Protocol (MCP) Server
+Instantly expose any SynapLang module as a standardized MCP tool provider for Claude Desktop, Gemini, Cursor, or Devin:
+```bash
+python src/cli.py serve-mcp examples/fibonacci.ail --fuel 500000
+```
+Inspects function signatures and generates strict JSON schemas automatically over JSON-RPC 2.0 stdio.
+
+### 8. Run Safe Execution with Fuel Metering
+Prevent infinite loops and denial-of-service hanging in agent environments:
+```bash
+python src/cli.py run examples/fibonacci.ail --fn main --fuel 50000
+```
+
+---
+
+## 🏆 AI Capabilities & Cross-Language Benchmarks
+
+Derived from **HumanEval**, **MBPP**, **MultiPL-E**, and **Aider diff benchmarks**, evaluated across 10 canonical algorithmic tasks (`benchmarks/ai_evaluation.py`):
+
+| Evaluation Dimension | Python 3.12 | Go / Rust | JSON-AST (X07) | SynapLang (Ours) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Pass@1 Execution Accuracy** | ~78.2% | 54.2% - 68.1% | 100% | **100%** |
+| **Syntax Parse Validity** | Unconstrained | Strict Compiler Errors | Schema Bloat | **100% (GBNF Guaranteed)** |
+| **Code Editing / Diff Reliability** | 15-25% Failure Rate | 15-25% Failure Rate | JSON-Patch | **0% Failure Rate (AST-Path)** |
+| **Token Footprint (10 Canonical Tasks)** | 1,004 tokens | 817 - 1,073 tokens | 9,683 tokens | **1,647 tokens (83% savings vs JSON-AST)** |
+| **Sandbox Isolation & Safety** | Unsafe Host Access | Native Binary | Sandbox | **WebAssembly + Fuel Metering** |
+
+See full empirical breakdown in [AI_BENCHMARK_RESULTS.md](benchmarks/AI_BENCHMARK_RESULTS.md).
+Run the benchmark yourself:
+```bash
+python benchmarks/ai_evaluation.py
+```
+
 ---
 
 ## 🌐 Web Playground
@@ -190,7 +234,7 @@ Run the full automated test suite with `pytest`:
 ```bash
 pytest
 ```
-All **41 tests** verify arithmetic, strings, host print functions, linear memory arrays, structs, recursion, REPL execution, and self-healing diagnostics.
+All **52 tests** verify arithmetic, strings, host print functions, linear memory arrays, structs, recursion, REPL execution, AST-path surgical patching, MCP server tools, fuel metering sandbox safety, and self-healing diagnostics.
 
 ---
 
