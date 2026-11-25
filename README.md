@@ -167,7 +167,7 @@ Derived from **HumanEval**, **MBPP**, **MultiPL-E**, and **Aider diff benchmarks
 | **Pass@1 Execution Accuracy** | ~78.2% | 54.2% - 68.1% | 100% | **100%** |
 | **Syntax Parse Validity** | Unconstrained | Strict Compiler Errors | Schema Bloat | **100% (GBNF Guaranteed)** |
 | **Code Editing / Diff Reliability** | 15-25% Failure Rate | 15-25% Failure Rate | JSON-Patch | **0% Failure Rate (AST-Path)** |
-| **Token Footprint (10 Canonical Tasks)** | 1,004 tokens | 817 - 1,073 tokens | 9,683 tokens | **1,647 tokens (83% savings vs JSON-AST)** |
+| **Token Footprint (10 Canonical Tasks)** | 1,004 tokens | 817 - 1,073 tokens | 9,683 tokens | **832 tokens (Shorter than Python & Rust, 91.4% savings vs JSON-AST)** |
 | **Sandbox Isolation & Safety** | Unsafe Host Access | Native Binary | Sandbox | **WebAssembly + Fuel Metering** |
 
 See full empirical breakdown in [AI_BENCHMARK_RESULTS.md](benchmarks/AI_BENCHMARK_RESULTS.md).

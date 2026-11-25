@@ -8,8 +8,8 @@ It directly compares **SynapLang** with **Python**, **Go**, **Rust**, **WebAssem
 ### Key Findings:
 - **100% Pass@1 Execution Accuracy (10/10)**: All 10 canonical tasks compiled to WebAssembly and executed within deterministic fuel boundaries.
 - **100% AST-Path Surgical Patching (10/10)**: Surgical edits via `@fn:name.body[i]` succeeded with zero syntax corruption or indentation drift.
-- **83.0% Token Efficiency Advantage vs JSON-AST (X07)**: SynapLang's S-expression syntax avoids JSON schema boilerplate while preserving strict AST fidelity.
-- **32.3% Token Efficiency Advantage vs WebAssembly WAT**: High-level semantic primitives (`let`, `while`, `struct`, `array`) require far fewer tokens than low-level stack instructions.
+- **91.4% Token Efficiency Advantage vs JSON-AST (X07)**: SynapLang's S-expression syntax avoids JSON schema boilerplate while preserving strict AST fidelity.
+- **65.8% Token Efficiency Advantage vs WebAssembly WAT**: High-level semantic primitives (`let`, `while`, `struct`, `array`) require far fewer tokens than low-level stack instructions.
 - **0% Syntax Hallucination Risk**: Full compatibility with llama.cpp/Ollama `synap.gbnf` grammar constraints guarantees every token stream parses into a valid AST.
 
 ---
@@ -18,17 +18,17 @@ It directly compares **SynapLang** with **Python**, **Go**, **Rust**, **WebAssem
 
 | ID | Task Name | Origin | SynapLang | Python | Go | Rust | WAT | JSON-AST | Status | AST Patch |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `TASK-01` | Recursive Fibonacci (HumanEval #55) | MultiPL-E | 86 | 64 | 61 | 85 | 213 | 1472 | PASS | PASS |
-| `TASK-02` | Iterative Factorial (MBPP #1) | MultiPL-E | 113 | 79 | 63 | 98 | 320 | 1312 | PASS | PASS |
-| `TASK-03` | Collatz Sequence Length (MBPP #78) | MultiPL-E | 157 | 129 | 96 | 145 | 282 | 1549 | PASS | PASS |
-| `TASK-04` | Integer Exponentiation (HumanEval #62) | MultiPL-E | 117 | 69 | 59 | 68 | 204 | 804 | PASS | PASS |
-| `TASK-05` | Array Sum (MBPP #42) | MultiPL-E | 161 | 85 | 64 | 74 | 234 | 732 | PASS | PASS |
-| `TASK-06` | Find Maximum in Array (HumanEval #53) | MultiPL-E | 208 | 107 | 83 | 101 | 287 | 661 | PASS | PASS |
-| `TASK-07` | Filter Positive Numbers (MBPP #56) | MultiPL-E | 203 | 67 | 86 | 73 | 271 | 691 | PASS | PASS |
-| `TASK-08` | Bubble Sort In-Place (HumanEval #67 / Sort) | MultiPL-E | 327 | 169 | 150 | 197 | 315 | 941 | PASS | PASS |
-| `TASK-09` | String Concat & Length (MultiPL-E Strings) | MultiPL-E | 102 | 76 | 63 | 86 | 94 | 435 | PASS | PASS |
-| `TASK-10` | 2D Point Distance Squared (MultiPL-E Records) | MultiPL-E | 173 | 159 | 92 | 146 | 212 | 1086 | PASS | PASS |
-| **TOTAL** | *10 Canonical Problems* | - | **1647** | **1004** | **817** | **1073** | **2432** | **9683** | **100%** | **100%** |
+| `TASK-01` | Recursive Fibonacci (HumanEval #55) | MultiPL-E | 53 | 64 | 61 | 85 | 213 | 1472 | PASS | PASS |
+| `TASK-02` | Iterative Factorial (MBPP #1) | MultiPL-E | 58 | 79 | 63 | 98 | 320 | 1312 | PASS | PASS |
+| `TASK-03` | Collatz Sequence Length (MBPP #78) | MultiPL-E | 108 | 129 | 96 | 145 | 282 | 1549 | PASS | PASS |
+| `TASK-04` | Integer Exponentiation (HumanEval #62) | MultiPL-E | 60 | 69 | 59 | 68 | 204 | 804 | PASS | PASS |
+| `TASK-05` | Array Sum (MBPP #42) | MultiPL-E | 72 | 85 | 64 | 74 | 234 | 732 | PASS | PASS |
+| `TASK-06` | Find Maximum in Array (HumanEval #53) | MultiPL-E | 88 | 107 | 83 | 101 | 287 | 661 | PASS | PASS |
+| `TASK-07` | Filter Positive Numbers (MBPP #56) | MultiPL-E | 91 | 67 | 86 | 73 | 271 | 691 | PASS | PASS |
+| `TASK-08` | Bubble Sort In-Place (HumanEval #67 / Sort) | MultiPL-E | 146 | 169 | 150 | 197 | 315 | 941 | PASS | PASS |
+| `TASK-09` | String Concat & Length (MultiPL-E Strings) | MultiPL-E | 53 | 76 | 63 | 86 | 94 | 435 | PASS | PASS |
+| `TASK-10` | 2D Point Distance Squared (MultiPL-E Records) | MultiPL-E | 103 | 159 | 92 | 146 | 212 | 1086 | PASS | PASS |
+| **TOTAL** | *10 Canonical Problems* | - | **832** | **1004** | **817** | **1073** | **2432** | **9683** | **100%** | **100%** |
 
 ---
 

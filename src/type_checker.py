@@ -162,7 +162,9 @@ class TypeChecker:
 
         if isinstance(expr, Let):
             val_type = self._check_expr(expr.value, expected_return)
-            if val_type != expr.type_name:
+            if expr.type_name in (Type.UNKNOWN, "", None):
+                expr.type_name = val_type
+            elif val_type != expr.type_name:
                 raise TypeErrorException(
                     "TypeMismatch",
                     f"Cannot assign expression of type '{val_type}' to variable '{expr.name}' of type '{expr.type_name}'",

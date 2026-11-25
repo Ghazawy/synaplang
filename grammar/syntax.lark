@@ -36,6 +36,7 @@ type_name: "i32"     -> type_i32
      | unary_op
      | if_expr
      | while_expr
+     | for_expr
      | block_expr
      | call_expr
      | return_expr
@@ -65,6 +66,8 @@ var_ref: CNAME
 let_expr: "(" "let" CNAME ":" type_name expr ")"
         | "(" "let" CNAME type_name expr ")"
         | "(" "let" "(" CNAME ":" type_name ")" expr ")"
+        | "(" "let" CNAME expr ")"
+        | "(" ":=" CNAME expr ")"
 
 set_expr: "(" "set" CNAME expr ")"
 
@@ -82,23 +85,32 @@ if_expr: "(" "if" expr expr expr? ")"
 
 while_expr: "(" "while" expr expr+ ")"
 
+for_expr: "(" "for" CNAME expr expr expr+ ")"
+
 block_expr: "(" "do" expr+ ")"
           | "(" "block" expr+ ")"
 
 call_expr: "(" "call" CNAME expr* ")"
+         | "(" CNAME expr* ")"
 
 return_expr: "(" "return" expr ")"
 
 arr_new_expr: "(" "arr_new" expr ")"
 arr_get_expr: "(" "arr_get" expr expr ")"
+            | "(" "@" expr expr ")"
 arr_set_expr: "(" "arr_set" expr expr expr ")"
+            | "(" "@=" expr expr expr ")"
 arr_len_expr: "(" "arr_len" expr ")"
+            | "(" "#" expr ")"
+            | "(" "len" expr ")"
 arr_lit_expr: "(" "array" expr* ")"
+            | "[" expr* "]"
 
 struct_new_expr: "(" "struct_new" CNAME expr* ")"
                | "(" "new" CNAME expr* ")"
 struct_get_expr: "(" "struct_get" expr CNAME ")"
                | "(" "." expr CNAME ")"
+               | "(" "get" expr CNAME ")"
 struct_set_expr: "(" "struct_set" expr CNAME expr ")"
 
 print_str_expr: "(" "print" expr ")"

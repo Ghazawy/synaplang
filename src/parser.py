@@ -74,9 +74,14 @@ class ASTBuilder(Transformer):
         return VarRef(loc=_get_loc(meta), name=str(children[0]))
 
     def let_expr(self, meta, children):
-        name = str(children[0])
-        type_name = str(children[1])
-        expr = children[2]
+        if len(children) == 2:
+            name = str(children[0])
+            type_name = Type.UNKNOWN
+            expr = children[1]
+        else:
+            name = str(children[0])
+            type_name = str(children[1])
+            expr = children[2]
         return Let(loc=_get_loc(meta), name=name, type_name=type_name, value=expr)
 
     def set_expr(self, meta, children):
@@ -109,13 +114,30 @@ class ASTBuilder(Transformer):
         body = children[1:]
         return While(loc=_get_loc(meta), cond=cond, body=body)
 
+    def for_expr(self, meta, children):
+        var_name = str(children[0])
+        start_expr = children[1]
+        end_expr = children[2]
+        body = children[3:]
+        loc = _get_loc(meta)
+
+        let_var = Let(loc=loc, name=var_name, type_name=Type.I32, value=start_expr)
+        cond = BinaryOp(loc=loc, op="<", left=VarRef(loc=loc, name=var_name), right=end_expr)
+        incr = Set(loc=loc, name=var_name, value=BinaryOp(loc=loc, op="+", left=VarRef(loc=loc, name=var_name), right=Literal(loc=loc, value=1, type_name=Type.I32)))
+        full_body = list(body) + [incr]
+        while_node = While(loc=loc, cond=cond, body=full_body)
+        return Block(loc=loc, exprs=[let_var, while_node])
+
     def block_expr(self, meta, children):
         return Block(loc=_get_loc(meta), exprs=children)
 
     def call_expr(self, meta, children):
         fn_name = str(children[0])
         args = children[1:]
-        return Call(loc=_get_loc(meta), fn_name=fn_name, args=args)
+        loc = _get_loc(meta)
+        if fn_name in ("not", "neg") and len(args) == 1:
+            return UnaryOp(loc=loc, op=fn_name, expr=args[0])
+        return Call(loc=loc, fn_name=fn_name, args=args)
 
     def return_expr(self, meta, children):
         return Return(loc=_get_loc(meta), expr=children[0])

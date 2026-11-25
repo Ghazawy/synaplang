@@ -41,7 +41,11 @@ BENCHMARKS = [
         "desc": "Deep call stack recursion, conditional base cases, arithmetic tree",
         "expected_result": 55,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn fib (n: i32) -> i32
+  (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))
+(fn main () -> i32
+  (fib 10))""",
+        "synap_verbose_code": """(module
   (fn fib (n: i32) -> i32
     (if (<= n 1)
       n
@@ -52,6 +56,10 @@ BENCHMARKS = [
     (call fib 10)
   )
 )""",
+        "synap_code": """(fn fib (n: i32) -> i32
+  (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))
+(fn main () -> i32
+  (fib 10))""",
         "python_code": """def fib(n: int) -> int:
     if n <= 1:
         return n
@@ -128,7 +136,7 @@ pub fn main() -> i32 {
 }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(call fib 8)",
+            "replacement": "(fib 8)",
             "expected_patched": 21
         }
     },
@@ -138,7 +146,14 @@ pub fn main() -> i32 {
         "desc": "Loop iteration, accumulator variables, mutable assignment",
         "expected_result": 720,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn fact (n: i32) -> i32
+  (let res 1)
+  (for i 1 (+ n 1)
+    (set res (* res i)))
+  res)
+(fn main () -> i32
+  (fact 6))""",
+        "synap_verbose_code": """(module
   (fn fact (n: i32) -> i32
     (let res: i32 1)
     (let i: i32 1)
@@ -152,6 +167,13 @@ pub fn main() -> i32 {
     (call fact 6)
   )
 )""",
+        "synap_code": """(fn fact (n: i32) -> i32
+  (let res 1)
+  (for i 1 (+ n 1)
+    (set res (* res i)))
+  res)
+(fn main () -> i32
+  (fact 6))""",
         "python_code": """def fact(n: int) -> int:
     res = 1
     i = 1
@@ -239,7 +261,7 @@ pub fn main() -> i32 {
 }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(call fact 5)",
+            "replacement": "(fact 5)",
             "expected_patched": 120
         }
     },
@@ -249,7 +271,18 @@ pub fn main() -> i32 {
         "desc": "Dynamic convergence loops, nested modulo arithmetic, branching",
         "expected_result": 111,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn collatz (n: i32) -> i32
+  (let steps 0)
+  (let cur n)
+  (while (> cur 1)
+    (if (== (% cur 2) 0)
+      (set cur (/ cur 2))
+      (set cur (+ (* cur 3) 1)))
+    (set steps (+ steps 1)))
+  steps)
+(fn main () -> i32
+  (collatz 27))""",
+        "synap_verbose_code": """(module
   (fn collatz (n: i32) -> i32
     (let steps: i32 0)
     (let cur: i32 n)
@@ -266,6 +299,17 @@ pub fn main() -> i32 {
     (call collatz 27)
   )
 )""",
+        "synap_code": """(fn collatz (n: i32) -> i32
+  (let steps 0)
+  (let cur n)
+  (while (> cur 1)
+    (if (== (% cur 2) 0)
+      (set cur (/ cur 2))
+      (set cur (+ (* cur 3) 1)))
+    (set steps (+ steps 1)))
+  steps)
+(fn main () -> i32
+  (collatz 27))""",
         "python_code": """def collatz(n: int) -> int:
     steps = 0
     cur = n
@@ -346,7 +390,7 @@ func main() int { return collatz(27) }""",
 pub fn main() -> i32 { collatz(27) }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(call collatz 12)",
+            "replacement": "(collatz 12)",
             "expected_patched": 9
         }
     },
@@ -356,7 +400,14 @@ pub fn main() -> i32 { collatz(27) }""",
         "desc": "Multiplicative power algorithm, iterative state evolution",
         "expected_result": 2187,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn power (base: i32 exp: i32) -> i32
+  (let res 1)
+  (for i 0 exp
+    (set res (* res base)))
+  res)
+(fn main () -> i32
+  (power 3 7))""",
+        "synap_verbose_code": """(module
   (fn power (base: i32 exp: i32) -> i32
     (let result: i32 1)
     (let i: i32 0)
@@ -370,6 +421,13 @@ pub fn main() -> i32 { collatz(27) }""",
     (call power 3 7)
   )
 )""",
+        "synap_code": """(fn power (base: i32 exp: i32) -> i32
+  (let res 1)
+  (for i 0 exp
+    (set res (* res base)))
+  res)
+(fn main () -> i32
+  (power 3 7))""",
         "python_code": """def power(base: int, exp: int) -> int:
     result = 1
     for _ in range(exp):
@@ -420,7 +478,7 @@ func main() int { return power(3, 7) }""",
 pub fn main() -> i32 { power(3, 7) }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(call power 2 10)",
+            "replacement": "(power 2 10)",
             "expected_patched": 1024
         }
     },
@@ -430,7 +488,14 @@ pub fn main() -> i32 { power(3, 7) }""",
         "desc": "Linear memory allocation, indexed iteration, accumulator",
         "expected_result": 150,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn array_sum (arr: arr_i32) -> i32
+  (let total 0)
+  (for i 0 (len arr)
+    (set total (+ total (@ arr i))))
+  total)
+(fn main () -> i32
+  (array_sum [10 20 30 40 50]))""",
+        "synap_verbose_code": """(module
   (fn array_sum (arr: arr_i32) -> i32
     (let total: i32 0)
     (let i: i32 0)
@@ -446,6 +511,13 @@ pub fn main() -> i32 { power(3, 7) }""",
     (call array_sum nums)
   )
 )""",
+        "synap_code": """(fn array_sum (arr: arr_i32) -> i32
+  (let total 0)
+  (for i 0 (len arr)
+    (set total (+ total (@ arr i))))
+  total)
+(fn main () -> i32
+  (array_sum [10 20 30 40 50]))""",
         "python_code": """def array_sum(arr: list[int]) -> int:
     total = 0
     for x in arr:
@@ -499,7 +571,7 @@ func main() int { return arraySum([]int{10, 20, 30, 40, 50}) }""",
 pub fn main() -> i32 { array_sum(&[10, 20, 30, 40, 50]) }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(let nums: arr_i32 (array 1 2 3 4 5))",
+            "replacement": "(array_sum [1 2 3 4 5])",
             "expected_patched": 15
         }
     },
@@ -509,7 +581,15 @@ pub fn main() -> i32 { array_sum(&[10, 20, 30, 40, 50]) }""",
         "desc": "Linear array scanning, conditional comparison, state update",
         "expected_result": 99,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn find_max (arr: arr_i32) -> i32
+  (let m (@ arr 0))
+  (for i 1 (len arr)
+    (let v (@ arr i))
+    (if (> v m) (set m v)))
+  m)
+(fn main () -> i32
+  (find_max [15 42 8 99 23 71]))""",
+        "synap_verbose_code": """(module
   (fn find_max (arr: arr_i32) -> i32
     (let max_val: i32 (arr_get arr 0))
     (let i: i32 1)
@@ -528,6 +608,14 @@ pub fn main() -> i32 { array_sum(&[10, 20, 30, 40, 50]) }""",
     (call find_max nums)
   )
 )""",
+        "synap_code": """(fn find_max (arr: arr_i32) -> i32
+  (let m (@ arr 0))
+  (for i 1 (len arr)
+    (let v (@ arr i))
+    (if (> v m) (set m v)))
+  m)
+(fn main () -> i32
+  (find_max [15 42 8 99 23 71]))""",
         "python_code": """def find_max(arr: list[int]) -> int:
     max_val = arr[0]
     for x in arr[1:]:
@@ -586,7 +674,7 @@ func main() int { return findMax([]int{15, 42, 8, 99, 23, 71}) }""",
 pub fn main() -> i32 { find_max(&[15, 42, 8, 99, 23, 71]) }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(let nums: arr_i32 (array 5 10 500 20))",
+            "replacement": "(find_max [5 10 500 20])",
             "expected_patched": 500
         }
     },
@@ -596,7 +684,15 @@ pub fn main() -> i32 { find_max(&[15, 42, 8, 99, 23, 71]) }""",
         "desc": "Array scanning, conditional filtering, accumulator computation",
         "expected_result": 40,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn sum_pos (arr: arr_i32) -> i32
+  (let s 0)
+  (for i 0 (len arr)
+    (let v (@ arr i))
+    (if (> v 0) (set s (+ s v))))
+  s)
+(fn main () -> i32
+  (sum_pos [-5 12 -3 8 0 -1 20]))""",
+        "synap_verbose_code": """(module
   (fn sum_positives (arr: arr_i32) -> i32
     (let sum: i32 0)
     (let i: i32 0)
@@ -615,6 +711,14 @@ pub fn main() -> i32 { find_max(&[15, 42, 8, 99, 23, 71]) }""",
     (call sum_positives nums)
   )
 )""",
+        "synap_code": """(fn sum_pos (arr: arr_i32) -> i32
+  (let s 0)
+  (for i 0 (len arr)
+    (let v (@ arr i))
+    (if (> v 0) (set s (+ s v))))
+  s)
+(fn main () -> i32
+  (sum_pos [-5 12 -3 8 0 -1 20]))""",
         "python_code": """def sum_positives(arr: list[int]) -> int:
     return sum(x for x in arr if x > 0)
 
@@ -662,7 +766,7 @@ func main() int { return sumPositives([]int{-5, 12, -3, 8, 0, -1, 20}) }""",
 pub fn main() -> i32 { sum_positives(&[-5, 12, -3, 8, 0, -1, 20]) }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(let nums: arr_i32 (array 10 -20 30))",
+            "replacement": "(sum_pos [10 -20 30])",
             "expected_patched": 40
         }
     },
@@ -672,7 +776,18 @@ pub fn main() -> i32 { sum_positives(&[-5, 12, -3, 8, 0, -1, 20]) }""",
         "desc": "Nested loop execution, multi-variable tracking, in-place memory swaps",
         "expected_result": 90,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn bubble_sort (arr: arr_i32) -> i32
+  (let n (len arr))
+  (for i 0 n
+    (for j 0 (- (- n i) 1)
+      (let a (@ arr j))
+      (let b (@ arr (+ j 1)))
+      (if (> a b)
+        (do (@= arr j b) (@= arr (+ j 1) a)))))
+  (@ arr (- n 1)))
+(fn main () -> i32
+  (bubble_sort [64 34 25 12 22 11 90]))""",
+        "synap_verbose_code": """(module
   (fn bubble_sort (arr: arr_i32) -> i32
     (let n: i32 (arr_len arr))
     (let i: i32 0)
@@ -698,6 +813,17 @@ pub fn main() -> i32 { sum_positives(&[-5, 12, -3, 8, 0, -1, 20]) }""",
     (call bubble_sort nums)
   )
 )""",
+        "synap_code": """(fn bubble_sort (arr: arr_i32) -> i32
+  (let n (len arr))
+  (for i 0 n
+    (for j 0 (- (- n i) 1)
+      (let a (@ arr j))
+      (let b (@ arr (+ j 1)))
+      (if (> a b)
+        (do (@= arr j b) (@= arr (+ j 1) a)))))
+  (@ arr (- n 1)))
+(fn main () -> i32
+  (bubble_sort [64 34 25 12 22 11 90]))""",
         "python_code": """def bubble_sort(arr: list[int]) -> int:
     n = len(arr)
     for i in range(n):
@@ -769,7 +895,7 @@ pub fn main() -> i32 {
 }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(let nums: arr_i32 (array 100 20 50 10))",
+            "replacement": "(bubble_sort [100 20 50 10])",
             "expected_patched": 100
         }
     },
@@ -779,7 +905,11 @@ pub fn main() -> i32 {
         "desc": "Linear memory string encoding, host boundary interop, string concatenation",
         "expected_result": 18,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(fn string_pipeline () -> i32
+  (str_len (str_concat "Agent_" "SynapLang_v2")))
+(fn main () -> i32
+  (string_pipeline))""",
+        "synap_verbose_code": """(module
   (fn string_pipeline () -> i32
     (let prefix: string "Agent_")
     (let id: string "SynapLang_v2")
@@ -790,6 +920,10 @@ pub fn main() -> i32 {
     (call string_pipeline)
   )
 )""",
+        "synap_code": """(fn string_pipeline () -> i32
+  (str_len (str_concat "Agent_" "SynapLang_v2")))
+(fn main () -> i32
+  (string_pipeline))""",
         "python_code": """def string_pipeline() -> int:
     prefix = "Agent_"
     id_str = "SynapLang_v2"
@@ -835,7 +969,7 @@ func main() int { return stringPipeline() }""",
 pub fn main() -> i32 { string_pipeline() }""",
         "patch_test": {
             "path": "@fn:string_pipeline.body[0]",
-            "replacement": "(let prefix: string \"AI_\")",
+            "replacement": "(str_len (str_concat \"AI_\" \"SynapLang_v2\"))",
             "expected_patched": 15
         }
     },
@@ -845,7 +979,14 @@ pub fn main() -> i32 { string_pipeline() }""",
         "desc": "Heap-allocated record structures, coordinate arithmetic, algebraic distance",
         "expected_result": 25,
         "entry_point": "main",
-        "synap_code": """(module
+        "synap_dense_code": """(struct Point [x: i32] [y: i32])
+(fn dist_sq (p1: Point p2: Point) -> i32
+  (let dx (- (. p1 x) (. p2 x)))
+  (let dy (- (. p1 y) (. p2 y)))
+  (+ (* dx dx) (* dy dy)))
+(fn main () -> i32
+  (dist_sq (new Point 3 4) (new Point 0 0)))""",
+        "synap_verbose_code": """(module
   (struct Point [x: i32] [y: i32])
   (fn distance_sq (p1: Point p2: Point) -> i32
     (let dx: i32 (- (struct_get p1 x) (struct_get p2 x)))
@@ -858,6 +999,13 @@ pub fn main() -> i32 { string_pipeline() }""",
     (call distance_sq pt1 pt2)
   )
 )""",
+        "synap_code": """(struct Point [x: i32] [y: i32])
+(fn dist_sq (p1: Point p2: Point) -> i32
+  (let dx (- (. p1 x) (. p2 x)))
+  (let dy (- (. p1 y) (. p2 y)))
+  (+ (* dx dx) (* dy dy)))
+(fn main () -> i32
+  (dist_sq (new Point 3 4) (new Point 0 0)))""",
         "python_code": """class Point:
     def __init__(self, x: int, y: int):
         self.x = x
@@ -918,7 +1066,7 @@ pub fn main() -> i32 {
 }""",
         "patch_test": {
             "path": "@fn:main.body[0]",
-            "replacement": "(let pt1: Point (struct_new Point 6 8))",
+            "replacement": "(dist_sq (new Point 6 8) (new Point 0 0))",
             "expected_patched": 100
         }
     }
