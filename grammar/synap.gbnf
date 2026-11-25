@@ -10,9 +10,9 @@ param_list ::= "(" ws (param ws)* ")" | "[" ws (param ws)* "]"
 param ::= ident ws ":" ws type_name | ident ws type_name | "[" ws ident ws ":" ws type_name ws "]" | "(" ws ident ws ":" ws type_name ws ")"
 
 return_type ::= "->" ws type_name
-type_name ::= "i32" | "f64" | "bool" | "arr_i32" | "string" | ident
+type_name ::= "i32" | "f64" | "bool" | "arr_i32" | "arr_f64" | "arr_bool" | "arr_string" | "string" | "[" ws type_name ws "]" | ident
 
-expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | for_expr | block_expr | call_expr | return_expr | arr_new_expr | arr_get_expr | arr_set_expr | arr_len_expr | arr_lit_expr | struct_new_expr | struct_get_expr | struct_set_expr | print_str_expr | println_str_expr | print_i32_expr | print_f64_expr | str_len_expr | str_concat_expr
+expr ::= literal | var_ref | let_expr | set_expr | binary_op | unary_op | if_expr | while_expr | for_expr | block_expr | arena_expr | heap_ptr_expr | label_expr | result_ok_expr | result_err_expr | result_is_ok_expr | result_is_err_expr | result_unwrap_expr | call_expr | return_expr | arr_new_expr | arr_get_expr | arr_set_expr | arr_len_expr | arr_lit_expr | struct_new_expr | struct_get_expr | struct_set_expr | print_str_expr | println_str_expr | print_i32_expr | print_f64_expr | str_len_expr | str_concat_expr
 
 literal ::= float_lit | int_lit | bool_lit | string_lit
 int_lit ::= "-"? [0-9]+
@@ -32,10 +32,20 @@ if_expr ::= "(" ws "if" ws expr ws expr (ws expr)? ws ")"
 while_expr ::= "(" ws "while" ws expr ws expr+ ws ")"
 for_expr ::= "(" ws "for" ws ident ws expr ws expr ws expr+ ws ")"
 block_expr ::= "(" ws ("block" | "do") ws expr+ ws ")"
+arena_expr ::= "(" ws ("with-arena" | "arena") ws expr+ ws ")"
+heap_ptr_expr ::= "(" ws ("heap_ptr" | "mem_ptr") ws ")"
+label_expr ::= "(" ws ("label" | "#") ws ident ws expr ws ")"
+
+result_ok_expr ::= "(" ws "ok" ws expr ws ")"
+result_err_expr ::= "(" ws "err" ws expr ws ")"
+result_is_ok_expr ::= "(" ws ("is_ok" | "ok?") ws expr ws ")"
+result_is_err_expr ::= "(" ws ("is_err" | "err?") ws expr ws ")"
+result_unwrap_expr ::= "(" ws ("unwrap" | "?") ws expr ws ")"
+
 call_expr ::= "(" ws "call" ws ident (ws expr)* ws ")" | "(" ws ident (ws expr)* ws ")"
 return_expr ::= "(" ws "return" ws expr ws ")"
 
-arr_new_expr ::= "(" ws "arr_new" ws expr ws ")"
+arr_new_expr ::= "(" ws "arr_new" (ws type_name)? ws expr ws ")"
 arr_get_expr ::= "(" ws "arr_get" ws expr ws expr ws ")" | "(" ws "@" ws expr ws expr ws ")"
 arr_set_expr ::= "(" ws "arr_set" ws expr ws expr ws expr ws ")" | "(" ws "@=" ws expr ws expr ws expr ws ")"
 arr_len_expr ::= "(" ws "arr_len" ws expr ws ")" | "(" ws ("#" | "len") ws expr ws ")"

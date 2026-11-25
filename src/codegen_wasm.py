@@ -6,6 +6,8 @@ from src.ail_ast import (
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
     StructDef, StructField, StructNew, StructGet, StructSet,
     PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
+    WithArena, HeapPtr, LabelExpr, ResultOk, ResultErr, ResultIsOk,
+    ResultIsErr, ResultUnwrap,
     Type
 )
 
@@ -95,6 +97,17 @@ class WasmCodegen:
             elif isinstance(e, StructSet):
                 walk(e.target)
                 walk(e.value)
+            elif isinstance(e, WithArena):
+                for b in e.body:
+                    walk(b)
+            elif isinstance(e, LabelExpr) and e.expr:
+                walk(e.expr)
+            elif isinstance(e, ResultOk) and e.value:
+                walk(e.value)
+            elif isinstance(e, ResultErr) and e.code:
+                walk(e.code)
+            elif isinstance(e, (ResultIsOk, ResultIsErr, ResultUnwrap)) and e.expr:
+                walk(e.expr)
 
         for fn in module.functions:
             for expr in fn.body:
@@ -135,13 +148,13 @@ class WasmCodegen:
 
         lines.extend([
             "",
-            "  ;; Linear memory allocator for dynamic arrays & strings with auto memory.grow",
-            "  (func $_alloc_arr (param $size i32) (result i32)",
+            "  ;; Linear memory allocator for dynamic arrays & strings with element size parameter",
+            "  (func $_alloc_arr_typed (param $size i32) (param $elem_size i32) (result i32)",
             "    (local $base i32)",
             "    (local $needed i32)",
             "    (local.set $base (global.get $heap_ptr))",
             "    (i32.store (local.get $base) (local.get $size))",
-            "    (local.set $needed (i32.add (i32.const 4) (i32.mul (local.get $size) (i32.const 4))))",
+            "    (local.set $needed (i32.add (i32.const 4) (i32.mul (local.get $size) (local.get $elem_size))))",
             "    (local.set $needed (i32.and (i32.add (local.get $needed) (i32.const 7)) (i32.const -8)))",
             "    (block $grow_arr_ok",
             "      (br_if $grow_arr_ok (i32.lt_u (i32.add (global.get $heap_ptr) (local.get $needed)) (i32.mul (memory.size) (i32.const 65536))))",
@@ -149,6 +162,10 @@ class WasmCodegen:
             "    )",
             "    (global.set $heap_ptr (i32.add (global.get $heap_ptr) (local.get $needed)))",
             "    (i32.add (local.get $base) (i32.const 4))",
+            "  )",
+            "",
+            "  (func $_alloc_arr (param $size i32) (result i32)",
+            "    (call $_alloc_arr_typed (local.get $size) (i32.const 4))",
             "  )",
             "",
             "  ;; Linear memory allocator for structs (fields * 8 bytes) with auto memory.grow",
@@ -222,9 +239,11 @@ class WasmCodegen:
         locals_dict: Dict[str, str] = {}
         has_arr_lit = False
         struct_counter = 0
+        arena_counter = 0
+        result_counter = 0
 
         def walk(e: Expr):
-            nonlocal has_arr_lit, struct_counter
+            nonlocal has_arr_lit, struct_counter, arena_counter, result_counter
             if isinstance(e, ArrLit):
                 has_arr_lit = True
                 for el in e.elements:
@@ -286,12 +305,39 @@ class WasmCodegen:
             elif isinstance(e, StructSet):
                 walk(e.target)
                 walk(e.value)
+            elif isinstance(e, WithArena):
+                arena_counter += 1
+                e._save_var = f"__arena_save_{arena_counter}"
+                locals_dict[e._save_var] = "i32"
+                res_type = getattr(e, "inferred_type", Type.VOID)
+                if res_type != Type.VOID:
+                    e._res_var = f"__arena_res_{arena_counter}"
+                    locals_dict[e._res_var] = wasm_type(res_type)
+                for b in e.body:
+                    walk(b)
+            elif isinstance(e, LabelExpr) and e.expr:
+                walk(e.expr)
+            elif isinstance(e, ResultOk):
+                result_counter += 1
+                e._temp_name = f"__res_{result_counter}"
+                locals_dict[e._temp_name] = "i32"
+                if e.value:
+                    walk(e.value)
+            elif isinstance(e, ResultErr):
+                result_counter += 1
+                e._temp_name = f"__res_{result_counter}"
+                locals_dict[e._temp_name] = "i32"
+                if e.code:
+                    walk(e.code)
+            elif isinstance(e, (ResultIsOk, ResultIsErr, ResultUnwrap)) and e.expr:
+                walk(e.expr)
 
         for e in exprs:
             walk(e)
 
         if has_arr_lit:
             locals_dict["__arr_tmp"] = "i32"
+            locals_dict["__arr_f64_tmp"] = "i32"
 
         return locals_dict
 
@@ -456,9 +502,89 @@ class WasmCodegen:
             val_code = self._generate_expr(expr.expr, indent + 2)
             return f"{sp}(return\n{val_code}\n{sp})"
 
+        if isinstance(expr, HeapPtr):
+            return f"{sp}(global.get $heap_ptr)"
+
+        if isinstance(expr, LabelExpr):
+            return self._generate_expr(expr.expr, indent)
+
+        if isinstance(expr, WithArena):
+            save_var = getattr(expr, "_save_var", "__arena_save_1")
+            res_var = getattr(expr, "_res_var", None)
+            res_type = getattr(expr, "inferred_type", Type.VOID)
+            lines = [
+                f"{sp}(local.set ${save_var} (global.get $heap_ptr))"
+            ]
+            num_exprs = len(expr.body)
+            for i, b in enumerate(expr.body):
+                is_last = (i == num_exprs - 1)
+                b_code = self._generate_expr(b, indent + 2)
+                b_type = getattr(b, "inferred_type", None)
+                if is_last and res_var and res_type != Type.VOID:
+                    lines.append(f"{sp}(local.set ${res_var}\n{b_code}\n{sp})")
+                else:
+                    if not is_last and b_type and b_type != Type.VOID and not isinstance(b, (Let, Set, While, ArrSet, StructSet, PrintStr, PrintlnStr, PrintI32, PrintF64)):
+                        b_code = f"{sp}(drop\n{b_code}\n{sp})"
+                    lines.append(b_code)
+            lines.append(f"{sp}(global.set $heap_ptr (local.get ${save_var}))")
+            if res_var and res_type != Type.VOID:
+                lines.append(f"{sp}(local.get ${res_var})")
+            return "\n".join(lines)
+
+        if isinstance(expr, ResultOk):
+            tmp_name = getattr(expr, "_temp_name", "__res_1")
+            val_code = self._generate_expr(expr.value, indent + 4)
+            val_t = getattr(expr.value, "inferred_type", Type.I32)
+            store_op = "f64.store" if val_t == Type.F64 else "i32.store"
+            lines = [
+                f"{sp}(block (result i32)",
+                f"{sp}  (local.set ${tmp_name} (call $_alloc_struct (i32.const 2)))",
+                f"{sp}  (i32.store (local.get ${tmp_name}) (i32.const 0))",
+                f"{sp}  ({store_op} (i32.add (local.get ${tmp_name}) (i32.const 8))\n{val_code}\n{sp}  )",
+                f"{sp}  (local.get ${tmp_name})",
+                f"{sp})"
+            ]
+            return "\n".join(lines)
+
+        if isinstance(expr, ResultErr):
+            tmp_name = getattr(expr, "_temp_name", "__res_1")
+            code_code = self._generate_expr(expr.code, indent + 4)
+            lines = [
+                f"{sp}(block (result i32)",
+                f"{sp}  (local.set ${tmp_name} (call $_alloc_struct (i32.const 2)))",
+                f"{sp}  (i32.store (local.get ${tmp_name}) (i32.const 1))",
+                f"{sp}  (i32.store (i32.add (local.get ${tmp_name}) (i32.const 8))\n{code_code}\n{sp}  )",
+                f"{sp}  (local.get ${tmp_name})",
+                f"{sp})"
+            ]
+            return "\n".join(lines)
+
+        if isinstance(expr, ResultIsOk):
+            target_code = self._generate_expr(expr.expr, indent + 4)
+            return f"{sp}(i32.eqz\n{sp}  (i32.load\n{target_code}\n{sp}  )\n{sp})"
+
+        if isinstance(expr, ResultIsErr):
+            target_code = self._generate_expr(expr.expr, indent + 4)
+            return f"{sp}(i32.ne\n{sp}  (i32.load\n{target_code}\n{sp}  )\n{sp}  (i32.const 0)\n{sp})"
+
+        if isinstance(expr, ResultUnwrap):
+            target_code = self._generate_expr(expr.expr, indent + 4)
+            val_t = getattr(expr, "inferred_type", Type.I32)
+            load_op = "f64.load" if val_t == Type.F64 else "i32.load"
+            return (
+                f"{sp}({load_op}\n"
+                f"{sp}  (i32.add\n"
+                f"{target_code}\n"
+                f"{sp}    (i32.const 8)\n"
+                f"{sp}  )\n"
+                f"{sp})"
+            )
+
         if isinstance(expr, ArrNew):
             size_code = self._generate_expr(expr.size, indent + 2)
-            return f"{sp}(call $_alloc_arr\n{size_code}\n{sp})"
+            elem_t = getattr(expr, "elem_type", Type.I32)
+            elem_size = 8 if elem_t == Type.F64 else 4
+            return f"{sp}(call $_alloc_arr_typed\n{size_code}\n{sp}  (i32.const {elem_size})\n{sp})"
 
         if isinstance(expr, ArrLen):
             arr_code = self._generate_expr(expr.arr, indent + 4)
@@ -474,13 +600,16 @@ class WasmCodegen:
         if isinstance(expr, ArrGet):
             arr_code = self._generate_expr(expr.arr, indent + 4)
             idx_code = self._generate_expr(expr.index, indent + 6)
+            elem_t = getattr(expr, "inferred_type", Type.I32)
+            elem_size = 8 if elem_t == Type.F64 else 4
+            load_op = "f64.load" if elem_t == Type.F64 else "i32.load"
             return (
-                f"{sp}(i32.load\n"
+                f"{sp}({load_op}\n"
                 f"{sp}  (i32.add\n"
                 f"{arr_code}\n"
                 f"{sp}    (i32.mul\n"
                 f"{idx_code}\n"
-                f"{sp}      (i32.const 4)\n"
+                f"{sp}      (i32.const {elem_size})\n"
                 f"{sp}    )\n"
                 f"{sp}  )\n"
                 f"{sp})"
@@ -490,13 +619,16 @@ class WasmCodegen:
             arr_code = self._generate_expr(expr.arr, indent + 4)
             idx_code = self._generate_expr(expr.index, indent + 6)
             val_code = self._generate_expr(expr.value, indent + 2)
+            val_t = getattr(expr.value, "inferred_type", Type.I32)
+            elem_size = 8 if val_t == Type.F64 else 4
+            store_op = "f64.store" if val_t == Type.F64 else "i32.store"
             return (
-                f"{sp}(i32.store\n"
+                f"{sp}({store_op}\n"
                 f"{sp}  (i32.add\n"
                 f"{arr_code}\n"
                 f"{sp}    (i32.mul\n"
                 f"{idx_code}\n"
-                f"{sp}      (i32.const 4)\n"
+                f"{sp}      (i32.const {elem_size})\n"
                 f"{sp}    )\n"
                 f"{sp}  )\n"
                 f"{val_code}\n"
@@ -505,19 +637,23 @@ class WasmCodegen:
 
         if isinstance(expr, ArrLit):
             n = len(expr.elements)
+            is_float = (len(expr.elements) > 0 and getattr(expr.elements[0], "inferred_type", Type.I32) == Type.F64)
+            elem_size = 8 if is_float else 4
+            store_op = "f64.store" if is_float else "i32.store"
+            tmp_var = "$__arr_f64_tmp" if is_float else "$__arr_tmp"
             lines = [
                 f"{sp}(block (result i32)",
-                f"{sp}  (local.set $__arr_tmp (call $_alloc_arr (i32.const {n})))"
+                f"{sp}  (local.set {tmp_var} (call $_alloc_arr_typed (i32.const {n}) (i32.const {elem_size})))"
             ]
             for i, el in enumerate(expr.elements):
                 el_code = self._generate_expr(el, indent + 4)
-                offset = i * 4
+                offset = i * elem_size
                 lines.append(
-                    f"{sp}  (i32.store (i32.add (local.get $__arr_tmp) (i32.const {offset}))\n"
+                    f"{sp}  ({store_op} (i32.add (local.get {tmp_var}) (i32.const {offset}))\n"
                     f"{el_code}\n"
                     f"{sp}  )"
                 )
-            lines.append(f"{sp}  (local.get $__arr_tmp)")
+            lines.append(f"{sp}  (local.get {tmp_var})")
             lines.append(f"{sp})")
             return "\n".join(lines)
 

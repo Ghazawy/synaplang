@@ -6,6 +6,8 @@ from src.ail_ast import (
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
     StructDef, StructField, StructNew, StructGet, StructSet,
     PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
+    WithArena, HeapPtr, LabelExpr, ResultOk, ResultErr, ResultIsOk,
+    ResultIsErr, ResultUnwrap,
     Type, ASTNode
 )
 
@@ -288,6 +290,12 @@ class TypeChecker:
             if expr.else_branch:
                 else_t = self._check_expr(expr.else_branch, expected_return)
                 if then_t != else_t:
+                    if then_t == "Result_Err" and else_t.startswith("Result_"):
+                        expr.inferred_type = else_t
+                        return else_t
+                    elif else_t == "Result_Err" and then_t.startswith("Result_"):
+                        expr.inferred_type = then_t
+                        return then_t
                     raise TypeErrorException(
                         "BranchTypeMismatch",
                         f"Both branches of if expression must have identical types, got '{then_t}' and '{else_t}'",
@@ -371,6 +379,49 @@ class TypeChecker:
             expr.inferred_type = ret_t
             return ret_t
 
+        if isinstance(expr, WithArena):
+            ret_t = Type.VOID
+            for b in expr.body:
+                ret_t = self._check_expr(b, expected_return)
+            expr.inferred_type = ret_t
+            return ret_t
+
+        if isinstance(expr, HeapPtr):
+            expr.inferred_type = Type.I32
+            return Type.I32
+
+        if isinstance(expr, LabelExpr):
+            ret_t = self._check_expr(expr.expr, expected_return)
+            expr.inferred_type = ret_t
+            return ret_t
+
+        if isinstance(expr, ResultOk):
+            val_t = self._check_expr(expr.value, expected_return)
+            res_t = f"Result_{val_t}"
+            expr.inferred_type = res_t
+            return res_t
+
+        if isinstance(expr, ResultErr):
+            self._check_expr(expr.code, expected_return)
+            res_t = "Result_Err"
+            expr.inferred_type = res_t
+            return res_t
+
+        if isinstance(expr, (ResultIsOk, ResultIsErr)):
+            self._check_expr(expr.expr, expected_return)
+            expr.inferred_type = Type.BOOL
+            return Type.BOOL
+
+        if isinstance(expr, ResultUnwrap):
+            target_t = self._check_expr(expr.expr, expected_return)
+            val_t = Type.I32
+            if target_t.startswith("Result_"):
+                suffix = target_t[7:]
+                if suffix != "Err":
+                    val_t = suffix
+            expr.inferred_type = val_t
+            return val_t
+
         if isinstance(expr, ArrNew):
             size_t = self._check_expr(expr.size, expected_return)
             if size_t != Type.I32:
@@ -382,19 +433,21 @@ class TypeChecker:
                     found=size_t,
                     suggested_fix="Pass an integer (i32) size to arr_new"
                 )
-            expr.inferred_type = Type.ARR_I32
-            return Type.ARR_I32
+            elem_t = getattr(expr, "elem_type", Type.I32)
+            arr_t = Type.array_of(elem_t)
+            expr.inferred_type = arr_t
+            return arr_t
 
         if isinstance(expr, ArrGet):
             arr_t = self._check_expr(expr.arr, expected_return)
-            if arr_t != Type.ARR_I32:
+            if not Type.is_array(arr_t):
                 raise TypeErrorException(
                     "TypeMismatch",
-                    f"arr_get expects arr_i32 as first argument, got '{arr_t}'",
+                    f"arr_get expects an array as first argument, got '{arr_t}'",
                     expr,
                     expected=Type.ARR_I32,
                     found=arr_t,
-                    suggested_fix="Pass an array (arr_i32) to arr_get"
+                    suggested_fix="Pass an array to arr_get"
                 )
             idx_t = self._check_expr(expr.index, expected_return)
             if idx_t != Type.I32:
@@ -406,19 +459,20 @@ class TypeChecker:
                     found=idx_t,
                     suggested_fix="Use an integer index (i32) for arr_get"
                 )
-            expr.inferred_type = Type.I32
-            return Type.I32
+            elem_t = Type.elem_type(arr_t)
+            expr.inferred_type = elem_t
+            return elem_t
 
         if isinstance(expr, ArrSet):
             arr_t = self._check_expr(expr.arr, expected_return)
-            if arr_t != Type.ARR_I32:
+            if not Type.is_array(arr_t):
                 raise TypeErrorException(
                     "TypeMismatch",
-                    f"arr_set expects arr_i32 as first argument, got '{arr_t}'",
+                    f"arr_set expects an array as first argument, got '{arr_t}'",
                     expr,
                     expected=Type.ARR_I32,
                     found=arr_t,
-                    suggested_fix="Pass an array (arr_i32) to arr_set"
+                    suggested_fix="Pass an array to arr_set"
                 )
             idx_t = self._check_expr(expr.index, expected_return)
             if idx_t != Type.I32:
@@ -430,47 +484,53 @@ class TypeChecker:
                     found=idx_t,
                     suggested_fix="Use an integer index (i32) for arr_set"
                 )
+            elem_t = Type.elem_type(arr_t)
             val_t = self._check_expr(expr.value, expected_return)
-            if val_t != Type.I32:
+            if val_t != elem_t:
                 raise TypeErrorException(
                     "TypeMismatch",
-                    f"arr_set value must be i32 for arr_i32, got '{val_t}'",
+                    f"arr_set value must be '{elem_t}' for '{arr_t}', got '{val_t}'",
                     expr,
-                    expected=Type.I32,
+                    expected=elem_t,
                     found=val_t,
-                    suggested_fix="Ensure value assigned into arr_i32 is an i32"
+                    suggested_fix=f"Ensure value assigned into {arr_t} is {elem_t}"
                 )
             expr.inferred_type = Type.VOID
             return Type.VOID
 
         if isinstance(expr, ArrLen):
             arr_t = self._check_expr(expr.arr, expected_return)
-            if arr_t != Type.ARR_I32:
+            if not Type.is_array(arr_t):
                 raise TypeErrorException(
                     "TypeMismatch",
-                    f"arr_len expects arr_i32, got '{arr_t}'",
+                    f"arr_len expects an array, got '{arr_t}'",
                     expr,
                     expected=Type.ARR_I32,
                     found=arr_t,
-                    suggested_fix="Pass an array (arr_i32) to arr_len"
+                    suggested_fix="Pass an array to arr_len"
                 )
             expr.inferred_type = Type.I32
             return Type.I32
 
         if isinstance(expr, ArrLit):
-            for i, el in enumerate(expr.elements):
+            if not expr.elements:
+                expr.inferred_type = Type.ARR_I32
+                return Type.ARR_I32
+            first_t = self._check_expr(expr.elements[0], expected_return)
+            for i, el in enumerate(expr.elements[1:], 2):
                 el_t = self._check_expr(el, expected_return)
-                if el_t != Type.I32:
+                if el_t != first_t:
                     raise TypeErrorException(
                         "TypeMismatch",
-                        f"Array literal element {i+1} must be i32, got '{el_t}'",
+                        f"Array literal element {i} has type '{el_t}', expected '{first_t}' to match array",
                         el,
-                        expected=Type.I32,
+                        expected=first_t,
                         found=el_t,
-                        suggested_fix="Ensure all elements in (array ...) are i32"
+                        suggested_fix=f"Ensure all elements in array literal are of type '{first_t}'"
                     )
-            expr.inferred_type = Type.ARR_I32
-            return Type.ARR_I32
+            arr_t = Type.array_of(first_t)
+            expr.inferred_type = arr_t
+            return arr_t
 
         if isinstance(expr, PrintStr):
             t = self._check_expr(expr.expr, expected_return)

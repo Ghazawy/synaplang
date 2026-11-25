@@ -1,7 +1,7 @@
 # ⚡ SynapLang: The AI-Native Programming Language
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/badge/tests-52%20passed-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-70%20passed-brightgreen.svg)]()
 [![Target: WebAssembly](https://img.shields.io/badge/target-WebAssembly-654FF0.svg)](https://webassembly.org/)
 [![Protocol: MCP](https://img.shields.io/badge/protocol-Model%20Context%20Protocol%20(MCP)-blueviolet.svg)](https://modelcontextprotocol.io)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -23,15 +23,17 @@ For over seventy years, programming languages were designed to cater to human bi
 1. **Homoiconic S-Expressions:** The syntax *is* the Abstract Syntax Tree (AST). 1:1 bijection. Zero parsing ambiguity.
 2. **Machine-Readable Diagnostics:** When an error occurs, the compiler outputs structured **JSON** with exact AST locations and actionable suggested fixes for instant self-healing.
 3. **Bare-Metal Speed with WebAssembly:** Directly compiles to WebAssembly (`.wat` / Wasm) for near-C execution performance inside a sandboxed environment (**up to 34x faster than Python**).
-4. **Strict Static Typing:** Catch 100% of type bugs at compile time (`i32`, `f64`, `bool`, `arr_i32`, `string`, and custom `struct` records).
-5. **Linear Memory & Auto-Grow:** Built-in dynamic and static array primitives (`arr_new`, `arr_get`, `arr_set`, `arr_len`, `array`) and structs backed by auto-growing WebAssembly linear memory (`memory.grow`).
-6. **Composite Structs & Records:** Typed record structures in linear memory (`struct`, `struct_new`, `struct_get`, `struct_set`).
-7. **Interactive Terminal REPL:** Instant evaluation, live session state, and pretty diagnostics with `synap repl`.
-8. **Web Playground:** Run SynapLang directly inside your browser on GitHub Pages with zero installation.
-9. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
-10. **Fuel Metering & Sandbox Safety:** Deterministic execution limits prevent infinite loops (`OutOfFuelError`) and memory out-of-bounds attacks (`MemoryOutOfBoundsError`).
-11. **AST-Path Surgical Patching:** Modify code via semantic AST paths (`@fn:name.body[i]`) rather than brittle text diffs, achieving a **0% edit failure rate**.
-12. **Model Context Protocol (MCP) Server:** Expose any SynapLang module directly as an MCP tool server via JSON-RPC 2.0 stdio with strict auto-generated JSON schemas.
+4. **Strict Static Typing:** Catch 100% of type bugs at compile time (`i32`, `f64`, `bool`, `string`, `[f64]`, `[i32]`, `Result_<T>`, and custom `struct` records).
+5. **Lexical Arena Allocator (`with-arena`):** Deterministic, constant-memory garbage collection ($O(1)$) preventing monotonic linear memory leaks in loops and agent workloads.
+6. **Generic Typed Array System:** Native support for `[f64]`, `[bool]`, `[string]` and `[i32]` with compile-time type verification and 8-byte/4-byte typed WebAssembly layout.
+7. **Algebraic Result Error Handling:** Zero-overhead functional errors with `(ok val)`, `(err code)`, `(is_ok r)`, `(is_err r)`, and `(unwrap r)` with algebraic subtyping unification.
+8. **Composite Structs & Records:** Typed record structures in linear memory (`struct`, `struct_new`, `struct_get`, `struct_set`).
+9. **Interactive Terminal REPL:** Instant evaluation, live session state, and pretty diagnostics with `synap repl`.
+10. **Web Playground:** Run SynapLang directly inside your browser on GitHub Pages with zero installation.
+11. **GBNF Constrained Decoding:** Built-in GBNF grammar export for `llama.cpp` and `Ollama` ensuring zero syntax errors at generation time.
+12. **Fuel Metering & Sandbox Safety:** Deterministic execution limits prevent infinite loops (`OutOfFuelError`) and memory out-of-bounds attacks (`MemoryOutOfBoundsError`).
+13. **Semantic AST-Path Surgical Patching:** Modify code via semantic AST paths and anchored labels (`@fn:name#label`) plus transactional multi-node patching (`patch_multi`) with **0% edit failure rate**.
+14. **Model Context Protocol (MCP) Server:** Expose any SynapLang module directly as an MCP tool server via JSON-RPC 2.0 stdio with strict auto-generated JSON schemas.
 
 ---
 
@@ -226,6 +228,46 @@ Try SynapLang in the browser! Open `site/index.html` in your browser or deploy i
   total)
 ```
 
+### Lexical Arena Memory Allocator ($O(1)$ constant loop memory):
+```lisp
+(fn process_iterations (n: i32) -> i32
+  (let i: i32 0)
+  (let total: i32 0)
+  (while (< i n)
+    ;; Allocations inside with-arena are automatically reclaimed on block exit!
+    (with-arena
+      (let temp: [i32] (arr_new 500 i32))
+      (arr_set temp 0 i)
+      (set total (+ total (arr_get temp 0))))
+    (set i (+ i 1)))
+  total)
+```
+
+### Algebraic Error Handling (`Result_<T>`):
+```lisp
+(fn safe_divide (a: i32, b: i32) -> Result_i32
+  (if (== b 0)
+      (err 400)
+      (ok (/ a b))))
+
+(fn main () -> i32
+  (let res: Result_i32 (call safe_divide 100 5))
+  (if (is_ok res)
+      (unwrap res)
+      -1))
+```
+
+### Generic Arrays & Semantic AST Anchors:
+```lisp
+(fn sum_floats (arr: [f64]) -> f64
+  (let total: f64 0.0)
+  (let i: i32 0)
+  (while (< i (arr_len arr))
+    (#loop_body (set total (+ total (arr_get arr i))))
+    (set i (+ i 1)))
+  total)
+```
+
 ---
 
 ## 🧪 Running Automated Tests
@@ -234,7 +276,7 @@ Run the full automated test suite with `pytest`:
 ```bash
 pytest
 ```
-All **52 tests** verify arithmetic, strings, host print functions, linear memory arrays, structs, recursion, REPL execution, AST-path surgical patching, MCP server tools, fuel metering sandbox safety, and self-healing diagnostics.
+All **70 tests** verify arithmetic, strings, host print functions, linear memory arrays, structs, recursion, REPL execution, AST-path surgical patching, MCP server tools, fuel metering sandbox safety, self-healing diagnostics, lexical arena memory, generic arrays, algebraic results, and semantic label patching.
 
 ---
 

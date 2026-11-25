@@ -5,7 +5,8 @@ from src.ail_ast import (
     Literal, VarRef, Let, Set, BinaryOp, UnaryOp, If, While, Block,
     Call, Return, ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
     StructNew, StructGet, StructSet, PrintStr, PrintlnStr, PrintI32, PrintF64,
-    StrLen, StrConcat, Type
+    StrLen, StrConcat, WithArena, HeapPtr, LabelExpr, ResultOk, ResultErr,
+    ResultIsOk, ResultIsErr, ResultUnwrap, Type
 )
 from src.parser import Parser
 from src.type_checker import TypeChecker, TypeErrorException
@@ -157,6 +158,40 @@ def ast_to_s_expr(node: ASTNode, indent: int = 0) -> str:
         r = ast_to_s_expr(node.right, indent)
         return f"(str_concat {l} {r})"
 
+    if isinstance(node, WithArena):
+        lines = [f"{sp}(with-arena"]
+        for b in node.body:
+            lines.append(ast_to_s_expr(b, indent + 1))
+        lines.append(f"{sp})")
+        return "\n".join(lines)
+
+    if isinstance(node, HeapPtr):
+        return "(heap_ptr)"
+
+    if isinstance(node, LabelExpr):
+        inner = ast_to_s_expr(node.expr, indent)
+        return f"(label {node.name} {inner})"
+
+    if isinstance(node, ResultOk):
+        inner = ast_to_s_expr(node.value, indent)
+        return f"(ok {inner})"
+
+    if isinstance(node, ResultErr):
+        inner = ast_to_s_expr(node.code, indent)
+        return f"(err {inner})"
+
+    if isinstance(node, ResultIsOk):
+        inner = ast_to_s_expr(node.expr, indent)
+        return f"(is_ok {inner})"
+
+    if isinstance(node, ResultIsErr):
+        inner = ast_to_s_expr(node.expr, indent)
+        return f"(is_err {inner})"
+
+    if isinstance(node, ResultUnwrap):
+        inner = ast_to_s_expr(node.expr, indent)
+        return f"(unwrap {inner})"
+
     return str(node)
 
 class ASTPatcher:
@@ -170,6 +205,41 @@ class ASTPatcher:
         (parent_object, key_or_index_in_parent, target_node)
         """
         path = path.strip()
+
+        # Handle label paths like @fn:main#calc_step or #calc_step
+        if "#" in path:
+            prefix, label_target = path.split("#", 1)
+            prefix = prefix.strip()
+            label_target = label_target.strip()
+            search_root = module
+            if prefix:
+                _, _, search_root = self.resolve_path(module, prefix)
+
+            def find_label(curr, parent, accessor):
+                if hasattr(curr, "label") and curr.label == label_target:
+                    return parent, accessor, curr
+                if isinstance(curr, LabelExpr) and curr.name == label_target:
+                    return parent, accessor, curr
+                if isinstance(curr, list):
+                    for idx, item in enumerate(curr):
+                        res = find_label(item, curr, idx)
+                        if res:
+                            return res
+                elif hasattr(curr, "__dict__"):
+                    for k, v in curr.__dict__.items():
+                        if k in ("loc", "inferred_type", "_temp_name", "_save_var", "_res_var"):
+                            continue
+                        if isinstance(v, (ASTNode, list)):
+                            res = find_label(v, curr, k)
+                            if res:
+                                return res
+                return None
+
+            match = find_label(search_root, None, None)
+            if match and match[0] is not None:
+                return match
+            raise KeyError(f"Label '#{label_target}' not found in AST scope '{prefix or 'module'}'")
+
         segments = []
 
         # Handle symbolic paths like @fn:main.body[0] or @struct:Point.fields[1]
@@ -290,9 +360,48 @@ class ASTPatcher:
         # Return regenerated S-expression source
         return ast_to_s_expr(module)
 
+    def patch_multi(self, source_code: str, patches: List[Tuple[str, str]]) -> str:
+        """
+        Applies multiple replacement S-expressions transactionally to the AST
+        and returns the formatted source code after validating types.
+        """
+        module = self.parser.parse(source_code)
+        for path, replacement_code in patches:
+            parent, accessor, target = self.resolve_path(module, path)
+            parsed_replacement = None
+            wrap_src = f"(module (fn __dummy () {replacement_code}))"
+            try:
+                dummy_mod = self.parser.parse(wrap_src)
+                parsed_replacement = dummy_mod.functions[0].body[0]
+            except Exception:
+                wrap_top = f"(module {replacement_code})"
+                dummy_top = self.parser.parse(wrap_top)
+                if dummy_top.functions:
+                    parsed_replacement = dummy_top.functions[0]
+                elif getattr(dummy_top, "structs", []):
+                    parsed_replacement = dummy_top.structs[0]
+                else:
+                    raise ValueError(f"Could not parse replacement snippet: {replacement_code}")
+
+            if isinstance(parent, list):
+                parent[accessor] = parsed_replacement
+            elif hasattr(parent, str(accessor)):
+                setattr(parent, str(accessor), parsed_replacement)
+            elif isinstance(parent, dict):
+                parent[accessor] = parsed_replacement
+            else:
+                raise TypeError(f"Cannot apply patch to parent of type {type(parent).__name__}")
+
+        self.type_checker.check(module)
+        return ast_to_s_expr(module)
+
 _default_patcher = ASTPatcher()
 
 def patch(source_code: str, path: str, replacement_code: str) -> str:
     """Convenience function to patch source code via default ASTPatcher."""
     return _default_patcher.patch(source_code, path, replacement_code)
+
+def patch_multi(source_code: str, patches: List[Tuple[str, str]]) -> str:
+    """Convenience function to patch multiple AST nodes via default ASTPatcher."""
+    return _default_patcher.patch_multi(source_code, patches)
 

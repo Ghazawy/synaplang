@@ -17,16 +17,18 @@ param_list: "(" param* ")"
 param: CNAME ":" type_name
      | "(" CNAME ":" type_name ")"
      | "[" CNAME ":" type_name "]"
-     | CNAME type_name
 
 return_type: "->" type_name
 
-type_name: "i32"     -> type_i32
-         | "f64"     -> type_f64
-         | "bool"    -> type_bool
-         | "arr_i32" -> type_arr_i32
-         | "string"  -> type_string
-         | CNAME     -> type_custom
+type_name: "i32"                     -> type_i32
+         | "f64"                     -> type_f64
+         | "bool"                    -> type_bool
+         | "arr_i32"                 -> type_arr_i32
+         | "arr_f64"                 -> type_arr_f64
+         | "arr_bool"                -> type_arr_bool
+         | "arr_string"              -> type_arr_string
+         | "string"                  -> type_string
+         | CNAME                     -> type_custom
 
 ?expr: literal
      | var_ref
@@ -38,6 +40,14 @@ type_name: "i32"     -> type_i32
      | while_expr
      | for_expr
      | block_expr
+     | arena_expr
+     | heap_ptr_expr
+     | label_expr
+     | result_ok_expr
+     | result_err_expr
+     | result_is_ok_expr
+     | result_is_err_expr
+     | result_unwrap_expr
      | call_expr
      | return_expr
      | arr_new_expr
@@ -64,7 +74,6 @@ literal: SIGNED_FLOAT   -> float_lit
 var_ref: CNAME
 
 let_expr: "(" "let" CNAME ":" type_name expr ")"
-        | "(" "let" CNAME type_name expr ")"
         | "(" "let" "(" CNAME ":" type_name ")" expr ")"
         | "(" "let" CNAME expr ")"
         | "(" ":=" CNAME expr ")"
@@ -90,12 +99,32 @@ for_expr: "(" "for" CNAME expr expr expr+ ")"
 block_expr: "(" "do" expr+ ")"
           | "(" "block" expr+ ")"
 
+arena_expr: "(" WITH_ARENA expr+ ")"
+WITH_ARENA.2: "with-arena" | "with_arena" | "arena"
+
+heap_ptr_expr: "(" HEAP_PTR ")"
+HEAP_PTR.2: "heap_ptr" | "mem_ptr"
+
+label_expr: "(" "label" (CNAME | ESCAPED_STRING) expr ")"
+          | "(" "#" (CNAME | ESCAPED_STRING) expr ")"
+
+result_ok_expr: "(" "ok" expr ")"
+result_err_expr: "(" "err" expr ")"
+result_is_ok_expr: "(" IS_OK_KW expr ")"
+IS_OK_KW.2: "is_ok" | "ok?"
+
+result_is_err_expr: "(" IS_ERR_KW expr ")"
+IS_ERR_KW.2: "is_err" | "err?"
+
+result_unwrap_expr: "(" UNWRAP_KW expr ")"
+UNWRAP_KW.2: "unwrap" | "?"
+
 call_expr: "(" "call" CNAME expr* ")"
          | "(" CNAME expr* ")"
 
 return_expr: "(" "return" expr ")"
 
-arr_new_expr: "(" "arr_new" expr ")"
+arr_new_expr: "(" "arr_new" expr expr? ")"
 arr_get_expr: "(" "arr_get" expr expr ")"
             | "(" "@" expr expr ")"
 arr_set_expr: "(" "arr_set" expr expr expr ")"

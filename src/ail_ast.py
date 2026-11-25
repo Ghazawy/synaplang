@@ -7,8 +7,45 @@ class Type:
     BOOL = "bool"
     VOID = "void"
     ARR_I32 = "arr_i32"
+    ARR_F64 = "arr_f64"
+    ARR_BOOL = "arr_bool"
+    ARR_STRING = "arr_string"
     STRING = "string"
     UNKNOWN = "unknown"
+
+    @classmethod
+    def is_array(cls, s: str) -> bool:
+        if not s:
+            return False
+        return s in (cls.ARR_I32, cls.ARR_F64, cls.ARR_BOOL, cls.ARR_STRING) or s.startswith("arr_") or (s.startswith("[") and s.endswith("]"))
+
+    @classmethod
+    def elem_type(cls, s: str) -> str:
+        if s in (cls.ARR_I32, "i32[]", "[i32]"):
+            return cls.I32
+        if s in (cls.ARR_F64, "f64[]", "[f64]"):
+            return cls.F64
+        if s in (cls.ARR_BOOL, "bool[]", "[bool]"):
+            return cls.BOOL
+        if s in (cls.ARR_STRING, "string[]", "[string]"):
+            return cls.STRING
+        if s.startswith("arr_"):
+            return s[4:]
+        if s.startswith("[") and s.endswith("]"):
+            return s[1:-1]
+        return cls.I32
+
+    @classmethod
+    def array_of(cls, elem_t: str) -> str:
+        if elem_t == cls.I32:
+            return cls.ARR_I32
+        if elem_t == cls.F64:
+            return cls.ARR_F64
+        if elem_t == cls.BOOL:
+            return cls.ARR_BOOL
+        if elem_t == cls.STRING:
+            return cls.ARR_STRING
+        return f"[{elem_t}]"
 
     @classmethod
     def from_str(cls, s: str) -> str:
@@ -21,10 +58,18 @@ class Type:
             return cls.BOOL
         if s in ("void", "nil", "none"):
             return cls.VOID
-        if s in ("arr_i32", "array", "i32[]", "int[]", "arr"):
+        if s in ("arr_i32", "array", "i32[]", "int[]", "arr", "[i32]"):
             return cls.ARR_I32
+        if s in ("arr_f64", "f64[]", "float[]", "[f64]"):
+            return cls.ARR_F64
+        if s in ("arr_bool", "bool[]", "[bool]"):
+            return cls.ARR_BOOL
+        if s in ("arr_string", "string[]", "[string]"):
+            return cls.ARR_STRING
         if s in ("string", "str"):
             return cls.STRING
+        if s.startswith("[") and s.endswith("]"):
+            return s
         if s.isidentifier():
             return s
         raise ValueError(f"Unknown type: {s}")
@@ -37,6 +82,7 @@ class SourceLocation:
 @dataclass
 class ASTNode:
     loc: SourceLocation = field(default_factory=SourceLocation)
+    label: Optional[str] = None
 
 @dataclass
 class Expr(ASTNode):
@@ -98,8 +144,42 @@ class Return(Expr):
     expr: Optional[Expr] = None
 
 @dataclass
+class WithArena(Expr):
+    body: List[Expr] = field(default_factory=list)
+
+@dataclass
+class HeapPtr(Expr):
+    pass
+
+@dataclass
+class LabelExpr(Expr):
+    name: str = ""
+    expr: Optional[Expr] = None
+
+@dataclass
+class ResultOk(Expr):
+    value: Optional[Expr] = None
+
+@dataclass
+class ResultErr(Expr):
+    code: Optional[Expr] = None
+
+@dataclass
+class ResultIsOk(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class ResultIsErr(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
+class ResultUnwrap(Expr):
+    expr: Optional[Expr] = None
+
+@dataclass
 class ArrNew(Expr):
     size: Optional[Expr] = None
+    elem_type: str = Type.I32
 
 @dataclass
 class ArrGet(Expr):

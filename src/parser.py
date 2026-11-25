@@ -6,6 +6,8 @@ from src.ail_ast import (
     ArrNew, ArrGet, ArrSet, ArrLen, ArrLit,
     StructDef, StructField, StructNew, StructGet, StructSet,
     PrintStr, PrintlnStr, PrintI32, PrintF64, StrLen, StrConcat,
+    WithArena, HeapPtr, LabelExpr, ResultOk, ResultErr, ResultIsOk,
+    ResultIsErr, ResultUnwrap,
     Type, SourceLocation
 )
 
@@ -30,6 +32,19 @@ class ASTBuilder(Transformer):
 
     def type_arr_i32(self, meta, children):
         return Type.ARR_I32
+
+    def type_arr_f64(self, meta, children):
+        return Type.ARR_F64
+
+    def type_arr_bool(self, meta, children):
+        return Type.ARR_BOOL
+
+    def type_arr_string(self, meta, children):
+        return Type.ARR_STRING
+
+    def type_arr_generic(self, meta, children):
+        elem_t = str(children[0])
+        return Type.array_of(elem_t)
 
     def type_string(self, meta, children):
         return Type.STRING
@@ -131,19 +146,73 @@ class ASTBuilder(Transformer):
     def block_expr(self, meta, children):
         return Block(loc=_get_loc(meta), exprs=children)
 
+    def arena_expr(self, meta, children):
+        # First child is WITH_ARENA terminal
+        return WithArena(loc=_get_loc(meta), body=children[1:])
+
+    def heap_ptr_expr(self, meta, children):
+        return HeapPtr(loc=_get_loc(meta))
+
+    def label_expr(self, meta, children):
+        label_name = str(children[0]).strip('"')
+        inner_expr = children[1]
+        if hasattr(inner_expr, "label"):
+            inner_expr.label = label_name
+        return LabelExpr(loc=_get_loc(meta), name=label_name, expr=inner_expr)
+
+    def result_ok_expr(self, meta, children):
+        return ResultOk(loc=_get_loc(meta), value=children[0])
+
+    def result_err_expr(self, meta, children):
+        return ResultErr(loc=_get_loc(meta), code=children[0])
+
+    def result_is_ok_expr(self, meta, children):
+        # First child is IS_OK_KW terminal
+        return ResultIsOk(loc=_get_loc(meta), expr=children[1])
+
+    def result_is_err_expr(self, meta, children):
+        # First child is IS_ERR_KW terminal
+        return ResultIsErr(loc=_get_loc(meta), expr=children[1])
+
+    def result_unwrap_expr(self, meta, children):
+        # First child is UNWRAP_KW terminal
+        return ResultUnwrap(loc=_get_loc(meta), expr=children[1])
+
     def call_expr(self, meta, children):
         fn_name = str(children[0])
         args = children[1:]
         loc = _get_loc(meta)
         if fn_name in ("not", "neg") and len(args) == 1:
             return UnaryOp(loc=loc, op=fn_name, expr=args[0])
+        if fn_name == "ok" and len(args) == 1:
+            return ResultOk(loc=loc, value=args[0])
+        if fn_name == "err" and len(args) == 1:
+            return ResultErr(loc=loc, code=args[0])
+        if fn_name in ("is_ok", "ok?") and len(args) == 1:
+            return ResultIsOk(loc=loc, expr=args[0])
+        if fn_name in ("is_err", "err?") and len(args) == 1:
+            return ResultIsErr(loc=loc, expr=args[0])
+        if fn_name in ("unwrap", "?") and len(args) == 1:
+            return ResultUnwrap(loc=loc, expr=args[0])
+        if fn_name in ("heap_ptr", "mem_ptr") and len(args) == 0:
+            return HeapPtr(loc=loc)
         return Call(loc=loc, fn_name=fn_name, args=args)
 
     def return_expr(self, meta, children):
         return Return(loc=_get_loc(meta), expr=children[0])
 
     def arr_new_expr(self, meta, children):
-        return ArrNew(loc=_get_loc(meta), size=children[0])
+        if len(children) == 2:
+            first = children[0]
+            if isinstance(first, str):
+                elem_type = first
+            elif isinstance(first, VarRef):
+                elem_type = first.name
+            else:
+                elem_type = Type.I32
+            size = children[1]
+            return ArrNew(loc=_get_loc(meta), size=size, elem_type=elem_type)
+        return ArrNew(loc=_get_loc(meta), size=children[0], elem_type=Type.I32)
 
     def arr_get_expr(self, meta, children):
         return ArrGet(loc=_get_loc(meta), arr=children[0], index=children[1])
